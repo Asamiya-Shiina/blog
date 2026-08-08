@@ -343,5 +343,7 @@ a { color: inherit; }
     left: 20px; bottom: 20px; right: 20px;
     width: auto;
     max-width: 360px;
+    cursor: default;
+    touch-action: auto;
   }
 }
