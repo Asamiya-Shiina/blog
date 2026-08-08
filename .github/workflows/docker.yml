@@ -3,9 +3,6 @@ name: Build and Push Docker Image
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - '*.md'
-      - '.gitignore'
 
 jobs:
   build:
@@ -30,6 +27,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          tags: ghcr.io/asamiya-shiina/blog:latest
