@@ -1,16 +1,16 @@
-FROM node:20-alpine
-
-# 安装编译工具（better-sqlite3 需要）
-RUN apk add --no-cache python3 make g++
+FROM node:20-slim
 
 WORKDIR /app
 
-# 先复制依赖文件
+# 安装编译工具
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+
+# 复制依赖文件
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# 删除编译工具减小镜像
-RUN apk del python3 make g++
+# 清理编译工具
+RUN apt-get purge -y python3 make g++ && apt-get autoremove -y
 
 # 复制源码
 COPY . .
