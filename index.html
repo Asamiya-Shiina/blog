@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>朝宫椎名</title>
+  <meta name="description" content="个人主页 — 自我介绍 / 技能 / 经历" />
+  <link rel="stylesheet" href="/site/site.css" />
+  <style>
+    header.hero { margin-bottom: 96px; }
+    h1 {
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-weight: 400;
+      font-size: 44px;
+      line-height: 1.2;
+      letter-spacing: -0.5px;
+      margin: 0 0 24px;
+    }
+    header.hero p {
+      color: var(--muted);
+      font-size: 18px;
+      margin: 0;
+      max-width: 32em;
+    }
+    section { margin-bottom: 80px; }
+    h2 {
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-weight: 400;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--muted);
+      margin: 0 0 28px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .about p { margin: 0 0 16px; max-width: 36em; }
+    .skills ul {
+      list-style: none; padding: 0; margin: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px 24px;
+    }
+    .skills li { color: var(--fg); padding: 4px 0; transition: color 0.25s ease, transform 0.25s ease; }
+    .skills li::before { content: "·"; color: var(--muted); margin-right: 10px; }
+    .skills li:hover { color: var(--muted); transform: translateX(2px); }
+    .hero { animation: fadeUp 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+    .hero h1 { animation-delay: 0.05s; }
+    .hero p  { animation-delay: 0.25s; }
+    footer {
+      margin-top: 96px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px 24px;
+    }
+    footer a {
+      color: var(--muted);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+    }
+    footer a:hover { border-bottom-color: var(--muted); }
+    footer a, footer a * {
+      -webkit-user-select: text;
+      -moz-user-select: text;
+      -ms-user-select: text;
+      user-select: text;
+    }
+    @media (max-width: 560px) {
+      .wrap { padding: 64px 22px 80px; }
+      h1 { font-size: 34px; }
+      .skills ul { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+
+    <!-- 顶部开场 -->
+    <header class="hero">
+      <h1>欢迎来到朝宫椎名的小窝。</h1>
+      <p>做一些关于代码、设计和生活的小事。<br />这里是我的个人主页 —— 记录我在想什么、做什么。</p>
+    </header>
+
+    <!-- 关于我 -->
+    <section class="about reveal" id="about">
+      <h2>关于</h2>
+      <p>这里也许会对外开放也许也不会总之就是先写着</p>
+      <p>以后可能会改吧</p>
+    </section>
+
+    <!-- 技能 -->
+    <section class="skills reveal" id="skills">
+      <h2>技能</h2>
+      <ul>
+        <li>JavaScript / TypeScript</li>
+        <li>Python</li>
+        <li>React / Vue</li>
+        <li>Node.js</li>
+        <li>PostgreSQL</li>
+        <li>Docker</li>
+        <li>Figma</li>
+        <li>写作</li>
+      </ul>
+    </section>
+
+    <footer>
+      <a href="mailto:asamiya_shiina@hotmail.com">asamiya_shiina@hotmail.com</a>
+      <a href="https://github.com/Asamiya-Shiina" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://x.com/Alc_Aoi" target="_blank" rel="noopener">Twitter</a>
+      <a href="#">RSS</a>
+    </footer>
+  </main>
+
+  <!-- 顶部菜单 -->
+  <button class="nav-toggle" id="nav-toggle" aria-label="菜单" aria-expanded="false">
+    <span class="nav-toggle-bars" aria-hidden="true">
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+    </span>
+  </button>
+  <nav class="nav-menu" id="nav-menu" aria-label="导航">
+    <a href="/posts/">文章</a>
+    <a href="/search/">搜索</a>
+    <a href="/#about">关于</a>
+  </nav>
+
+  <!-- 右上角登录入口 -->
+  <a href="/login/" class="login-btn">登录</a>
+
+  <!-- 播放器 -->
+  <div class="player" id="player">
+    <div class="player-cover">
+      <img src="/image/IMG_20250703_100031.jpeg" alt="封面" />
+    </div>
+    <div class="player-info">
+      <div class="player-title">歌曲名</div>
+      <div class="player-progress"><div class="player-progress-fill"></div></div>
+    </div>
+    <button class="player-btn" id="player-btn" aria-label="播放或暂停">
+      <svg class="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      <svg class="icon-pause" viewBox="0 0 24 24"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
+    </button>
+    <audio id="audio" src="/audio/song.mp3" preload="metadata" loop></audio>
+  </div>
+
+  <script src="/site/site.js"></script>
+</body>
+</html>

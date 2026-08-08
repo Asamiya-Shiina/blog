@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Asamiya · 编辑文章</title>
+  <link rel="stylesheet" href="/admin/admin.css" />
+</head>
+<body>
+  <div class="page">
+
+    <header class="topbar">
+      <a class="brand" href="/admin/">Asamiya</a>
+      <nav>
+        <a href="/admin/">概览</a>
+        <a href="/admin/posts">文章</a>
+        <a href="/admin/files">文件</a>
+        <a href="/" target="_blank" rel="noopener">查看站点 ↗</a>
+      </nav>
+      <div class="spacer"></div>
+      <span class="user" id="admin-nav-user"></span>
+      <button class="logout" id="admin-logout" type="button">退出</button>
+    </header>
+
+    <main class="container wide">
+
+      <div id="notice" class="notice"></div>
+
+      <div class="card">
+        <label class="field">
+          <span class="lbl">标题</span>
+          <input type="text" id="title" maxlength="200" required />
+        </label>
+
+        <div style="display:grid;grid-template-columns:1fr 180px;gap:16px">
+          <label class="field">
+            <span class="lbl">Slug（URL 路径，可自动从标题生成）</span>
+            <input type="text" id="slug" maxlength="120" />
+          </label>
+          <label class="field">
+            <span class="lbl">状态</span>
+            <select id="status">
+              <option value="draft">草稿</option>
+              <option value="published">已发布</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="field">
+          <span class="lbl">摘要（可选）</span>
+          <textarea id="excerpt" maxlength="500" style="min-height:64px"></textarea>
+        </label>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <h2 style="margin:0">正文（Markdown）</h2>
+          <span style="color:var(--muted);font-size:12px">左侧编辑，右侧实时预览</span>
+        </div>
+        <div class="editor">
+          <textarea id="content_md" class="large"></textarea>
+          <div class="preview" id="preview"><div style="color:var(--muted)">预览…</div></div>
+        </div>
+      </div>
+
+      <div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" id="save">保存草稿</button>
+        <button class="btn btn-primary" id="publish">保存并发布</button>
+        <a class="btn btn-ghost" href="/admin/posts">返回列表</a>
+        <div class="spacer" style="flex:1"></div>
+        <button class="btn btn-danger" id="delete" style="display:none">删除</button>
+      </div>
+
+    </main>
+
+  </div>
+
+  <script src="/admin/admin.js"></script>
+  <script>
+    (() => {
+      const { api, escapeHtml } = window.admin;
+      const $ = (id) => document.getElementById(id);
+      const titleEl    = $('title');
+      const slugEl     = $('slug');
+      const statusEl   = $('status');
+      const excerptEl  = $('excerpt');
+      const contentEl  = $('content_md');
+      const previewEl  = $('preview');
+      const noticeEl   = $('notice');
+      const saveBtn    = $('save');
+      const pubBtn     = $('publish');
+      const delBtn     = $('delete');
+
+      const postId = new URLSearchParams(location.search).get('id');
+      let slugDirty = !!slugEl.value;
+      let lastSavedMd = '';
+      let lastSavedTitle = '';
+
+      function showNotice(type, msg) {
+        noticeEl.className = 'notice ' + type + ' is-visible';
+        noticeEl.textContent = msg;
+      }
+      function hideNotice() { noticeEl.className = 'notice'; }
+
+      function slugify(input) {
+        return String(input || '')
+          .toLowerCase()
+          .replace(/[\s_]+/g, '-')
+          .replace(/[^\p{Letter}\p{Number}\-]+/gu, '')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '')
+          .slice(0, 80);
+      }
+
+      titleEl.addEventListener('input', () => {
+        if (!slugDirty || !slugEl.value) {
+          slugEl.value = slugify(titleEl.value);
+          slugDirty = false;
+        }
+      });
+      slugEl.addEventListener('input', () => { slugDirty = true; });
+
+      let previewTimer = null;
+      async function refreshPreview() {
+        const md = contentEl.value;
+        try {
+          const { content_html } = await api('POST', '/api/posts/preview', { content_md: md });
+          previewEl.innerHTML = content_html || '<div style="color:var(--muted)">（空内容）</div>';
+        } catch {
+          previewEl.innerHTML = '<div style="color:var(--danger)">预览失败</div>';
+        }
+      }
+      contentEl.addEventListener('input', () => {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(refreshPreview, 300);
+      });
+
+      async function save(status) {
+        const title = titleEl.value.trim();
+        const content_md = contentEl.value;
+        const slug = slugEl.value.trim();
+        const excerpt = excerptEl.value.trim() || null;
+        if (!title)    { showNotice('error', '标题不能为空'); return; }
+        if (!content_md) { showNotice('error', '正文不能为空'); return; }
+        if (status === 'published' && !confirm('确定发布这篇文章吗？')) return;
+        statusEl.value = status;
+        hideNotice();
+        saveBtn.disabled = pubBtn.disabled = true;
+        try {
+          const payload = { title, content_md, status };
+          if (slug) payload.slug = slug;
+          if (excerpt) payload.excerpt = excerpt;
+          let res;
+          if (postId) {
+            res = await api('PUT', '/api/posts/' + postId, payload);
+          } else {
+            res = await api('POST', '/api/posts', payload);
+          }
+          lastSavedMd = res.content_md;
+          lastSavedTitle = res.title;
+          showNotice('success', status === 'published' ? '✓ 已发布' : '✓ 已保存');
+          if (status === 'published') {
+            setTimeout(() => { location.href = '/admin/'; }, 600);
+            return;
+          }
+          if (!postId && res.id) {
+            history.replaceState(null, '', '/admin/editor?id=' + res.id);
+          }
+          if (res.id) {
+            delBtn.style.display = '';
+            delBtn.onclick = async () => {
+              if (!confirm('确定删除这篇文章？')) return;
+              try { await api('DELETE', '/api/posts/' + res.id); location.href = '/admin/posts'; }
+              catch (e) { showNotice('error', '删除失败：' + e.message); }
+            };
+          }
+        } catch (err) {
+          showNotice('error', err.data?.details?.fieldErrors
+            ? JSON.stringify(err.data.details.fieldErrors)
+            : '保存失败：' + err.message);
+        } finally {
+          saveBtn.disabled = pubBtn.disabled = false;
+        }
+      }
+
+      saveBtn.addEventListener('click', () => save('draft'));
+      pubBtn.addEventListener('click',  () => save('published'));
+
+      (async () => {
+        if (postId) {
+          try {
+            const p = await api('GET', '/api/posts/' + postId);
+            titleEl.value   = p.title;
+            slugEl.value    = p.slug;
+            slugDirty       = true;
+            statusEl.value  = p.status;
+            excerptEl.value = p.excerpt || '';
+            contentEl.value = p.content_md;
+            lastSavedMd     = p.content_md;
+            lastSavedTitle  = p.title;
+            document.title  = 'Asamiya · ' + p.title;
+            delBtn.style.display = '';
+            delBtn.onclick = async () => {
+              if (!confirm('确定删除这篇文章？')) return;
+              try { await api('DELETE', '/api/posts/' + postId); location.href = '/admin/posts'; }
+              catch (e) { showNotice('error', '删除失败：' + e.message); }
+            };
+            refreshPreview();
+          } catch (err) {
+            showNotice('error', '加载失败：' + err.message);
+          }
+        } else {
+          refreshPreview();
+        }
+      })();
+    })();
+  </script>
+</body>
+</html>
