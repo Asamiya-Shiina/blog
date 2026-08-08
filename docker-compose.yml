@@ -1,6 +1,6 @@
 services:
   blog:
-    build: .
+    image: ghcr.io/asamiya-shiina/blog:latest
     restart: unless-stopped
     ports:
       - "3000:3000"
