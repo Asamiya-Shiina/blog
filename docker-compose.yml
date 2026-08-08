@@ -3,7 +3,7 @@ services:
     image: ghcr.io/asamiya-shiina/blog:latest
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "9900:3000"
     volumes:
       - ./data:/app/data
     env_file:
