@@ -201,37 +201,119 @@
       };
       const hideError = () => err.classList.remove('is-visible');
 
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        hideError();
-        const username = userEl.value.trim();
-        const password = passEl.value;
-        if (!username || !password) {
-          showError('请输入用户名和密码');
-          return;
-        }
-        btn.disabled = true;
-        btn.textContent = '登录中…';
-        try {
-          const res = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password }),
-          });
-          if (res.status === 204) {
-            window.location.href = '/admin/';
+      // 登录模式
+      function bindLogin() {
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          hideError();
+          const username = userEl.value.trim();
+          const password = passEl.value;
+          if (!username || !password) {
+            showError('请输入用户名和密码');
             return;
           }
-          if (res.status === 429) { showError('尝试次数过多，请稍后再试'); return; }
-          if (res.status === 401) { showError('用户名或密码错误'); return; }
-          showError('登录失败 (' + res.status + ')');
+          btn.disabled = true;
+          btn.textContent = '登录中…';
+          try {
+            const res = await fetch('/api/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username, password }),
+            });
+            if (res.status === 204) {
+              window.location.href = '/Asamiya/';
+              return;
+            }
+            if (res.status === 429) { showError('尝试次数过多，请稍后再试'); return; }
+            if (res.status === 401) { showError('用户名或密码错误'); return; }
+            showError('登录失败 (' + res.status + ')');
+          } catch {
+            showError('网络错误');
+          } finally {
+            btn.disabled = false;
+            btn.textContent = '登录';
+          }
+        });
+      }
+
+      // 切换为创建账号模式
+      function switchToSetup() {
+        document.querySelector('h1').textContent = '创建管理员账号';
+        document.querySelector('.subtitle').textContent = '首次使用，请设置管理员账户';
+        document.title = '创建账号';
+        btn.textContent = '创建账号';
+
+        // 添加确认密码字段
+        const confirmLabel = document.createElement('label');
+        confirmLabel.setAttribute('for', 'confirm');
+        confirmLabel.textContent = '确认密码';
+        const confirmInput = document.createElement('input');
+        confirmInput.id = 'confirm';
+        confirmInput.name = 'confirm';
+        confirmInput.type = 'password';
+        confirmInput.autocomplete = 'new-password';
+        confirmInput.required = true;
+        passEl.parentElement.insertBefore(confirmLabel, btn);
+        passEl.parentElement.insertBefore(confirmInput, btn);
+
+        // 修改密码字段的 autocomplete
+        passEl.autocomplete = 'new-password';
+
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          hideError();
+          const username = userEl.value.trim();
+          const password = passEl.value;
+          const confirm = confirmInput.value;
+          if (!username || !password) {
+            showError('请输入用户名和密码');
+            return;
+          }
+          if (password.length < 8) {
+            showError('密码至少需要 8 个字符');
+            return;
+          }
+          if (password !== confirm) {
+            showError('两次输入的密码不一致');
+            return;
+          }
+          btn.disabled = true;
+          btn.textContent = '创建中…';
+          try {
+            const res = await fetch('/api/setup', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username, password }),
+            });
+            if (res.status === 201) {
+              window.location.href = '/Asamiya/';
+              return;
+            }
+            const data = await res.json().catch(() => ({}));
+            showError(data.error || '创建失败 (' + res.status + ')');
+          } catch {
+            showError('网络错误');
+          } finally {
+            btn.disabled = false;
+            btn.textContent = '创建账号';
+          }
+        });
+      }
+
+      // 启动：检测是否需要初始化
+      (async () => {
+        try {
+          const res = await fetch('/api/setup-status');
+          const data = await res.json();
+          if (data.needsSetup) {
+            switchToSetup();
+          } else {
+            bindLogin();
+          }
         } catch {
-          showError('网络错误');
-        } finally {
-          btn.disabled = false;
-          btn.textContent = '登录';
+          bindLogin();
         }
-      });
+      })();
     })();
 
     // —— 雨滴涟漪动画 ——

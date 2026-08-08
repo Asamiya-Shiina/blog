@@ -4,18 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Asamiya · 编辑文章</title>
-  <link rel="stylesheet" href="/admin/admin.css" />
+  <link rel="stylesheet" href="/Asamiya/admin.css" />
 </head>
 <body>
   <div class="page">
 
     <header class="topbar">
-      <a class="brand" href="/admin/">Asamiya</a>
+      <a class="brand" href="/Asamiya/">Asamiya</a>
       <nav>
-        <a href="/admin/">概览</a>
-        <a href="/admin/posts">文章</a>
-        <a href="/admin/files">文件</a>
-        <a href="/admin/users">用户</a>
+        <a href="/Asamiya/">概览</a>
+        <a href="/Asamiya/posts">文章</a>
+        <a href="/Asamiya/users">用户</a>
         <a href="/" target="_blank" rel="noopener">查看站点 ↗</a>
       </nav>
       <div class="spacer"></div>
@@ -67,7 +66,7 @@
       <div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-primary" id="save">保存草稿</button>
         <button class="btn btn-primary" id="publish">保存并发布</button>
-        <a class="btn btn-ghost" href="/admin/posts">返回列表</a>
+        <a class="btn btn-ghost" href="/Asamiya/posts">返回列表</a>
         <div class="spacer" style="flex:1"></div>
         <button class="btn btn-danger" id="delete" style="display:none">删除</button>
       </div>
@@ -76,7 +75,7 @@
 
   </div>
 
-  <script src="/admin/admin.js"></script>
+  <script src="/Asamiya/admin.js"></script>
   <script>
     (() => {
       const { api, escapeHtml } = window.admin;
@@ -161,17 +160,17 @@
           lastSavedTitle = res.title;
           showNotice('success', status === 'published' ? '✓ 已发布' : '✓ 已保存');
           if (status === 'published') {
-            setTimeout(() => { location.href = '/admin/'; }, 600);
+            setTimeout(() => { location.href = '/Asamiya/'; }, 600);
             return;
           }
           if (!postId && res.id) {
-            history.replaceState(null, '', '/admin/editor?id=' + res.id);
+            history.replaceState(null, '', '/Asamiya/editor?id=' + res.id);
           }
           if (res.id) {
             delBtn.style.display = '';
             delBtn.onclick = async () => {
               if (!confirm('确定删除这篇文章？')) return;
-              try { await api('DELETE', '/api/posts/' + res.id); location.href = '/admin/posts'; }
+              try { await api('DELETE', '/api/posts/' + res.id); location.href = '/Asamiya/posts'; }
               catch (e) { showNotice('error', '删除失败：' + e.message); }
             };
           }
@@ -203,7 +202,7 @@
             delBtn.style.display = '';
             delBtn.onclick = async () => {
               if (!confirm('确定删除这篇文章？')) return;
-              try { await api('DELETE', '/api/posts/' + postId); location.href = '/admin/posts'; }
+              try { await api('DELETE', '/api/posts/' + postId); location.href = '/Asamiya/posts'; }
               catch (e) { showNotice('error', '删除失败：' + e.message); }
             };
             refreshPreview();

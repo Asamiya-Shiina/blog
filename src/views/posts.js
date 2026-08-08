@@ -171,7 +171,7 @@ function renderFloatingUI({ withLogin = false } = {}) {
   </button>
   <nav class="nav-menu" id="nav-menu" aria-label="导航">
     <a href="/">首页</a>
-    <a href="/posts/">文章</a>
+    <a href="/search/">搜索</a>
     <a href="/#about">关于</a>
   </nav>
 

@@ -315,15 +315,29 @@ a { color: inherit; }
 
 /* —— 手机响应 —— */
 @media (max-width: 560px) {
+  body {
+    overflow: hidden;
+    background-position: 60% center;
+  }
   body::before {
     top: 12px; right: 12px; bottom: 12px; left: 12px;
     border-radius: 14px;
   }
-  .wrap { padding: 64px 22px 80px; }
+  .wrap {
+    position: fixed;
+    top: 72px; right: 12px; bottom: 96px; left: 12px;
+    max-width: none;
+    margin: 0;
+    padding: 12px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+  .wrap.wide { max-width: none; }
 
-  .nav-toggle { top: 20px; left: 20px; }
-  .nav-menu   { top: 76px; left: 20px; }
-  .login-btn  { top: 20px; right: 20px; padding: 8px 18px; }
+  .nav-toggle { top: 22px; left: 22px; }
+  .nav-menu   { top: 68px; left: 22px; }
+  .login-btn  { top: 22px; right: 22px; padding: 8px 18px; }
 
   .player {
     left: 20px; bottom: 20px; right: 20px;

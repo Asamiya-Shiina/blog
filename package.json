@@ -20,7 +20,6 @@
     "express-rate-limit": "^8.6.2",
     "isomorphic-dompurify": "^3.22.0",
     "marked": "^18.0.9",
-    "multer": "^2.2.0",
     "zod": "^4.4.3"
   }
 }

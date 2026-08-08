@@ -4,18 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Asamiya · 文章</title>
-  <link rel="stylesheet" href="/admin/admin.css" />
+  <link rel="stylesheet" href="/Asamiya/admin.css" />
 </head>
 <body>
   <div class="page">
 
     <header class="topbar">
-      <a class="brand" href="/admin/">Asamiya</a>
+      <a class="brand" href="/Asamiya/">Asamiya</a>
       <nav>
-        <a href="/admin/">概览</a>
-        <a href="/admin/posts" class="is-active">文章</a>
-        <a href="/admin/files">文件</a>
-        <a href="/admin/users">用户</a>
+        <a href="/Asamiya/">概览</a>
+        <a href="/Asamiya/posts" class="is-active">文章</a>
+        <a href="/Asamiya/users">用户</a>
         <a href="/" target="_blank" rel="noopener">查看站点 ↗</a>
       </nav>
       <div class="spacer"></div>
@@ -34,7 +33,7 @@
         </select>
         <button class="btn btn-ghost" id="search-btn" type="button">搜索</button>
         <div class="spacer" style="flex:1"></div>
-        <a class="btn btn-primary" href="/admin/editor">+ 新建文章</a>
+        <a class="btn btn-primary" href="/Asamiya/editor">+ 新建文章</a>
       </div>
 
       <div class="card" style="padding:0">
@@ -63,7 +62,7 @@
 
   </div>
 
-  <script src="/admin/admin.js"></script>
+  <script src="/Asamiya/admin.js"></script>
   <script>
     (() => {
       const { api, escapeHtml } = window.admin;
@@ -87,15 +86,15 @@
         try {
           const data = await api('GET', '/api/posts?' + params);
           if (!data.items.length) {
-            rowsEl.innerHTML = '<tr><td colspan="4" class="empty">没有文章。<a href="/admin/editor">写一篇 →</a></td></tr>';
+            rowsEl.innerHTML = '<tr><td colspan="4" class="empty">没有文章。<a href="/Asamiya/editor">写一篇 →</a></td></tr>';
           } else {
             rowsEl.innerHTML = data.items.map(p => `
-              <tr class="row" onclick="window.location.href='/admin/editor?id=${p.id}'">
+              <tr class="row" onclick="window.location.href='/Asamiya/editor?id=${p.id}'">
                 <td><strong>${escapeHtml(p.title)}</strong>${p.excerpt ? `<div style="color:var(--muted);font-size:12px;margin-top:2px">${escapeHtml(p.excerpt)}</div>` : ''}</td>
                 <td><span class="tag ${p.status === 'published' ? 'tag-published' : 'tag-draft'}">${p.status === 'published' ? '已发布' : '草稿'}</span></td>
                 <td style="color:var(--muted);font-size:13px">${(p.updated_at || '').replace('T', ' ').slice(0, 16)}</td>
                 <td style="text-align:right">
-                  <button class="btn btn-ghost" onclick="event.stopPropagation(); window.location.href='/admin/editor?id=${p.id}'">编辑</button>
+                  <button class="btn btn-ghost" onclick="event.stopPropagation(); window.location.href='/Asamiya/editor?id=${p.id}'">编辑</button>
                   <button class="btn btn-danger" data-id="${p.id}" data-title="${escapeHtml(p.title)}">删除</button>
                 </td>
               </tr>

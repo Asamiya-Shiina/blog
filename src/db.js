@@ -39,16 +39,6 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_posts_status_updated
     ON posts(status, updated_at DESC);
 
-  CREATE TABLE IF NOT EXISTS files (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    filename    TEXT NOT NULL,
-    original    TEXT NOT NULL,
-    mime        TEXT NOT NULL,
-    size        INTEGER NOT NULL,
-    uploaded_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-  CREATE INDEX IF NOT EXISTS idx_files_uploaded
-    ON files(uploaded_at DESC);
 `);
 
 function userCount() {

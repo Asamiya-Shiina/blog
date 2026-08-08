@@ -9,7 +9,6 @@ const cookieParser = require('cookie-parser');
 const db = require('./src/db');
 const authRoutes = require('./src/routes/auth');
 const postsRoutes = require('./src/routes/posts');
-const filesRoutes = require('./src/routes/files');
 const { verify, COOKIE_NAME } = require('./src/auth');
 const { renderListPage, renderPostPage } = require('./src/views/posts');
 
@@ -24,7 +23,7 @@ app.use(cookieParser());
 // 反向代理信任（部署到 Nginx/Caddy 等后面时）
 app.set('trust proxy', 1);
 
-// 后台 HTML 页面：未登录直接访问 /admin/* 时重定向到登录页
+// 后台 HTML 页面：未登录直接访问 /Asamiya/* 时重定向到登录页
 // 静态资源（带扩展名的 CSS/JS/图片）放行（不带敏感内容）
 function requireAdminPage(req, res, next) {
   const token = req.cookies && req.cookies[COOKIE_NAME];
@@ -32,7 +31,7 @@ function requireAdminPage(req, res, next) {
   if (/\.[a-z0-9]+$/i.test(req.path)) return next();   // 静态资源
   return res.redirect('/login/');                       // HTML 页面 / 目录
 }
-app.use('/admin/', requireAdminPage);
+app.use('/Asamiya/', requireAdminPage);
 
 // 健康检查
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
@@ -40,7 +39,6 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 // 鉴权 / 文章 / 文件路由
 app.use('/api', authRoutes);
 app.use('/api/posts', postsRoutes);
-app.use('/api/files', filesRoutes);
 
 // —— 公开文章页（无需登录） ——
 app.get(['/posts', '/posts/'], (_req, res) => {
@@ -88,9 +86,6 @@ function notFoundPage(slug) {
   <a href="/posts/">← 所有文章</a>
 </div></body></html>`;
 }
-
-// 静态托管：用户上传的文件
-app.use('/uploads', express.static(path.resolve(process.env.UPLOAD_DIR || './data/uploads')));
 
 // 静态托管：admin / login 等后台页面（路径里直接挂 public/）
 app.use(express.static(path.join(__dirname, 'public')));
