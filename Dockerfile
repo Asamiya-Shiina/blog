@@ -1,8 +1,8 @@
-FROM node:20
+FROM node:18
 
 WORKDIR /app
 
-# 安装编译工具和 sqlite3 库
+# 安装编译工具
 RUN apt-get update && \
     apt-get install -y python3 make g++ libsqlite3-dev && \
     rm -rf /var/lib/apt/lists/*
