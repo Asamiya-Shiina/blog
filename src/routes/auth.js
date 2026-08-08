@@ -5,12 +5,17 @@ const bcrypt = require('bcrypt');
 const rateLimit = require('express-rate-limit');
 const { z } = require('zod');
 
+const db = require('../db');
 const {
   setSessionCookie,
   clearSessionCookie,
   requireAuth,
-  ADMIN_USERNAME,
-  ADMIN_PASSWORD_HASH,
+  requireAdmin,
+  getUserByUsername,
+  listUsers,
+  createUser,
+  deleteUser,
+  updatePassword,
 } = require('../auth');
 
 const router = express.Router();
@@ -23,31 +28,56 @@ const loginLimiter = rateLimit({
   message: { error: 'too many attempts, try again later' },
 });
 
-const loginSchema = z.object({
-  username: z.string().min(1).max(64),
-  password: z.string().min(1).max(256),
+const usernameSchema = z.string().min(1).max(64).regex(/^[a-zA-Z0-9_-]+$/, 'invalid username');
+const passwordSchema = z.string().min(8).max(256);
+const userCreateSchema = z.object({
+  username: usernameSchema,
+  password: passwordSchema,
+});
+const passwordOnlySchema = z.object({ password: passwordSchema });
+
+// 与 bcrypt cost=12 同长度的不匹配 hash，登录找不到用户时用于恒定时间比对
+const PLACEHOLDER_HASH = '$2b$12$..............................................................................';
+
+// —— 首次引导 ——
+router.get('/setup-status', (_req, res) => {
+  res.json({ needsSetup: db.userCount() === 0 });
 });
 
+router.post('/setup', (req, res) => {
+  if (db.userCount() !== 0) {
+    return res.status(409).json({ error: 'setup already done' });
+  }
+  const parsed = userCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid request' });
+  }
+  const user = createUser(parsed.data);
+  setSessionCookie(res, user.id);
+  res.status(201).json({ id: user.id, username: user.username, role: user.role });
+});
+
+// —— 登录 ——
 router.post('/login', loginLimiter, (req, res) => {
-  const parsed = loginSchema.safeParse(req.body);
+  const parsed = z.object({
+    username: z.string().min(1).max(64),
+    password: z.string().min(1).max(256),
+  }).safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid request' });
   }
   const { username, password } = parsed.data;
 
-  // 用恒等比较防时序探测；用户名比对故意走 bcrypt 同步路径保持恒定耗时
-  const userMatch = username === ADMIN_USERNAME;
-  // 先 hash 一份假密码占位，让比对路径长度恒定
-  const hashToCheck = userMatch
-    ? ADMIN_PASSWORD_HASH
-    : '$2b$12$..............................................................................';
+  // 用户不存在时也走一次 bcrypt，保持响应耗时恒定，避免用户名枚举
+  const user = getUserByUsername(username);
+  const hashToCheck = user ? user.password_hash : PLACEHOLDER_HASH;
   const passOk = bcrypt.compareSync(password, hashToCheck);
 
-  if (!userMatch || !passOk) {
+  if (!user || !passOk) {
     return res.status(401).json({ error: 'invalid credentials' });
   }
 
-  setSessionCookie(res, 1); // 单管理员，固定 id = 1
+  setSessionCookie(res, user.id);
   res.status(204).end();
 });
 
@@ -57,7 +87,55 @@ router.post('/logout', requireAuth, (_req, res) => {
 });
 
 router.get('/me', requireAuth, (req, res) => {
-  res.json({ id: req.user.id, username: req.user.username });
+  res.json({ id: req.user.id, username: req.user.username, role: req.user.role });
+});
+
+// —— 用户管理（仅管理员） ——
+router.get('/users', requireAuth, requireAdmin, (_req, res) => {
+  res.json({ items: listUsers() });
+});
+
+router.post('/users', requireAuth, requireAdmin, (req, res) => {
+  const parsed = userCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid request' });
+  }
+  try {
+    const user = createUser(parsed.data);
+    res.status(201).json({ id: user.id, username: user.username, role: user.role });
+  } catch (err) {
+    if (err && err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return res.status(409).json({ error: 'username already exists' });
+    }
+    throw err;
+  }
+});
+
+router.delete('/users/:id', requireAuth, requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'invalid id' });
+  if (id === req.user.id) {
+    return res.status(400).json({ error: 'cannot delete yourself' });
+  }
+  if (!deleteUser(id)) return res.status(404).json({ error: 'not found' });
+  res.status(204).end();
+});
+
+router.patch('/users/:id/password', requireAuth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'invalid id' });
+  // 自己或管理员可改
+  if (id !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  const parsed = passwordOnlySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid request' });
+  }
+  if (!updatePassword(id, parsed.data.password)) {
+    return res.status(404).json({ error: 'not found' });
+  }
+  res.status(204).end();
 });
 
 module.exports = router;

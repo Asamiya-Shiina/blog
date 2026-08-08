@@ -9,18 +9,10 @@ if (!SECRET) {
   process.exit(1);
 }
 
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
-if (!ADMIN_PASSWORD) {
-  console.error('ADMIN_PASSWORD is not set in .env');
-  process.exit(1);
-}
-// 启动时把环境变量里的明文密码哈希一次，之后每次登录比对哈希
-const ADMIN_PASSWORD_HASH = bcrypt.hashSync(ADMIN_PASSWORD, 12);
-
 const COOKIE_NAME = 'sid';
 const MAX_AGE_SECONDS = 30 * 24 * 60 * 60; // 30 天
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
+const BCRYPT_COST = 12;
 
 function sign(userId, expiresAt) {
   const payload = `${userId}.${expiresAt}`;
@@ -66,12 +58,58 @@ function clearSessionCookie(res) {
   res.clearCookie(COOKIE_NAME, { path: '/' });
 }
 
+// —— 用户 CRUD ——
+const db = require('./db');
+
+function getUserById(id) {
+  if (!Number.isFinite(id) || id <= 0) return null;
+  return db.prepare('SELECT id, username, role, created_at FROM users WHERE id = ?').get(id) || null;
+}
+
+function getUserByUsername(username) {
+  if (!username) return null;
+  return db.prepare('SELECT id, username, role, created_at, password_hash FROM users WHERE username = ?').get(username) || null;
+}
+
+function listUsers() {
+  return db.prepare('SELECT id, username, role, created_at FROM users ORDER BY id ASC').all();
+}
+
+function createUser({ username, password }) {
+  const hash = bcrypt.hashSync(password, BCRYPT_COST);
+  const info = db.prepare(`
+    INSERT INTO users (username, password_hash, role)
+    VALUES (?, ?, 'admin')
+  `).run(username, hash);
+  return getUserById(info.lastInsertRowid);
+}
+
+function deleteUser(id) {
+  const info = db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  return info.changes > 0;
+}
+
+function updatePassword(id, newPassword) {
+  const hash = bcrypt.hashSync(newPassword, BCRYPT_COST);
+  const info = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, id);
+  return info.changes > 0;
+}
+
+// —— 中间件 ——
 function requireAuth(req, res, next) {
   const token = req.cookies && req.cookies[COOKIE_NAME];
   const session = verify(token);
   if (!session) return res.status(401).json({ error: 'unauthorized' });
-  // 单管理员写死，不再查数据库
-  req.user = { id: 1, username: ADMIN_USERNAME };
+  const user = getUserById(session.userId);
+  if (!user) return res.status(401).json({ error: 'unauthorized' });
+  req.user = user;
+  next();
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'forbidden' });
+  }
   next();
 }
 
@@ -79,8 +117,14 @@ module.exports = {
   setSessionCookie,
   clearSessionCookie,
   requireAuth,
+  requireAdmin,
   verify,
   COOKIE_NAME,
-  ADMIN_USERNAME,
-  ADMIN_PASSWORD_HASH,
+  getUserById,
+  getUserByUsername,
+  listUsers,
+  createUser,
+  deleteUser,
+  updatePassword,
+  BCRYPT_COST,
 };

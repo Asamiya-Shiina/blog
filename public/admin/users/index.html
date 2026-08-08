@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Asamiya · 用户</title>
+  <link rel="stylesheet" href="/admin/admin.css" />
+</head>
+<body>
+  <div class="page">
+
+    <header class="topbar">
+      <a class="brand" href="/admin/">Asamiya</a>
+      <nav>
+        <a href="/admin/">概览</a>
+        <a href="/admin/posts">文章</a>
+        <a href="/admin/files">文件</a>
+        <a href="/admin/users" class="is-active">用户</a>
+        <a href="/" target="_blank" rel="noopener">查看站点 ↗</a>
+      </nav>
+      <div class="spacer"></div>
+      <span class="user" id="admin-nav-user"></span>
+      <button class="logout" id="admin-logout" type="button">退出</button>
+    </header>
+
+    <main class="container narrow">
+
+      <!-- 首次引导：未登录 + 无任何账号 -->
+      <section id="setup-view" hidden>
+        <div class="card">
+          <h2>首次设置</h2>
+          <p style="color:var(--muted);margin-top:0">还没有任何账号。创建第一个管理员账号，创建后自动登录。</p>
+          <div class="notice error" id="setup-error"></div>
+          <form id="setup-form">
+            <label class="field">
+              <span class="lbl">用户名（字母 / 数字 / 下划线 / 连字符）</span>
+              <input type="text" name="username" required maxlength="64" pattern="[a-zA-Z0-9_-]+" autocomplete="username" />
+            </label>
+            <label class="field">
+              <span class="lbl">密码（至少 8 位）</span>
+              <input type="password" name="password" required minlength="8" maxlength="256" autocomplete="new-password" />
+            </label>
+            <button class="btn btn-primary" type="submit">创建并登录</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- 正常管理：登录后 -->
+      <section id="manage-view" hidden>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="create-toggle" type="button">+ 新建用户</button>
+          <div style="flex:1"></div>
+          <span style="color:var(--muted);font-size:13px" id="count-info"></span>
+        </div>
+
+        <div class="card" id="create-card" hidden>
+          <h2>新建用户</h2>
+          <div class="notice error" id="create-error"></div>
+          <form id="create-form">
+            <label class="field">
+              <span class="lbl">用户名</span>
+              <input type="text" name="username" required maxlength="64" pattern="[a-zA-Z0-9_-]+" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span class="lbl">密码（至少 8 位）</span>
+              <input type="password" name="password" required minlength="8" maxlength="256" autocomplete="new-password" />
+            </label>
+            <button class="btn btn-primary" type="submit">创建</button>
+            <button class="btn btn-ghost" id="create-cancel" type="button" style="margin-left:8px">取消</button>
+          </form>
+        </div>
+
+        <div class="card" style="padding:0">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:40%">用户名</th>
+                <th style="width:15%">角色</th>
+                <th style="width:20%">创建时间</th>
+                <th style="text-align:right">操作</th>
+              </tr>
+            </thead>
+            <tbody id="rows">
+              <tr><td colspan="4" class="empty">加载中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <script src="/admin/admin.js"></script>
+  <script src="/admin/users/users.js"></script>
+</body>
+</html>

@@ -15,7 +15,15 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
 db.exec(`
-  DROP TABLE IF EXISTS users;
+  CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role          TEXT NOT NULL DEFAULT 'admin'
+                    CHECK (role IN ('admin')),
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
   CREATE TABLE IF NOT EXISTS posts (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,5 +50,12 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_files_uploaded
     ON files(uploaded_at DESC);
 `);
+
+function userCount() {
+  return db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+}
+
+module.exports = db;
+module.exports.userCount = userCount;
 
 module.exports = db;
