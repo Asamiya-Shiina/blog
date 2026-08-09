@@ -10,9 +10,11 @@ RUN npm ci --omit=dev
 
 COPY . .
 
+RUN chmod +x docker-entrypoint.sh
+
 # 数据目录（SQLite + 上传文件），运行时挂载 volume
 VOLUME /app/data
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+ENTRYPOINT ["./docker-entrypoint.sh"]
