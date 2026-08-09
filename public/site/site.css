@@ -25,7 +25,7 @@ body {
   background: url('/image/IMG_20250703_100031.jpeg') center/cover no-repeat fixed;
   min-height: 100vh;
   position: relative;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 /* 主页一样的玻璃卡蒙版：四边留缝、圆角、毛玻璃 */
@@ -53,10 +53,18 @@ body::before {
 }
 
 .wrap {
+  position: fixed;
+  top: 96px; right: 24px; bottom: 24px; left: 24px;
   max-width: 720px;
   margin: 0 auto;
-  padding: 96px 28px 120px;
+  padding: 0 28px 120px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  border-radius: 0 0 20px 20px;
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;       /* IE/Edge */
 }
+.wrap::-webkit-scrollbar { display: none; }  /* Chrome/Safari */
 .wrap.wide { max-width: 980px; }
 .wrap.narrow { max-width: 640px; }
 
@@ -324,14 +332,12 @@ a { color: inherit; }
     border-radius: 14px;
   }
   .wrap {
-    position: fixed;
     top: 72px; right: 12px; bottom: 96px; left: 12px;
     max-width: none;
     margin: 0;
     padding: 12px;
-    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior-y: contain;
+    border-radius: 0 0 14px 14px;
   }
   .wrap.wide { max-width: none; }
 
