@@ -1,4 +1,4 @@
-FROM node:18-slim
+FROM node:22-slim
 
 # better-sqlite3 + bcrypt 需要编译工具
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
