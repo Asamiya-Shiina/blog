@@ -1,7 +1,7 @@
 FROM node:24-slim
 
-# better-sqlite3 + bcrypt 需要编译工具
-RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+# better-sqlite3 + bcrypt 需要编译工具 + gosu 用于降权
+RUN apt-get update && apt-get install -y python3 make g++ gosu && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -21,6 +21,7 @@ VOLUME /app/data
 
 EXPOSE 3000
 
-USER blog
+# 不在这里设置 USER，让 entrypoint 以 root 运行以便修复权限
+# entrypoint 最终会降权到 blog 用户
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
