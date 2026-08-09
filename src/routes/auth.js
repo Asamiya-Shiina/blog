@@ -28,13 +28,32 @@ const loginLimiter = rateLimit({
   message: { error: 'too many attempts, try again later' },
 });
 
+const setupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'too many attempts, try again later' },
+});
+
+const writeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'too many requests, try again later' },
+});
+
 const usernameSchema = z.string().min(1).max(64).regex(/^[a-zA-Z0-9_-]+$/, 'invalid username');
 const passwordSchema = z.string().min(8).max(256);
 const userCreateSchema = z.object({
   username: usernameSchema,
   password: passwordSchema,
 });
-const passwordOnlySchema = z.object({ password: passwordSchema });
+const passwordChangeSchema = z.object({
+  old_password: z.string().min(1).max(256).optional(),
+  new_password: passwordSchema,
+});
 
 // 与 bcrypt cost=12 同长度的不匹配 hash，登录找不到用户时用于恒定时间比对
 const PLACEHOLDER_HASH = '$2b$12$..............................................................................';
@@ -44,7 +63,7 @@ router.get('/setup-status', (_req, res) => {
   res.json({ needsSetup: db.userCount() === 0 });
 });
 
-router.post('/setup', (req, res) => {
+router.post('/setup', setupLimiter, (req, res) => {
   if (db.userCount() !== 0) {
     return res.status(409).json({ error: 'setup already done' });
   }
@@ -95,7 +114,7 @@ router.get('/users', requireAuth, requireAdmin, (_req, res) => {
   res.json({ items: listUsers() });
 });
 
-router.post('/users', requireAuth, requireAdmin, (req, res) => {
+router.post('/users', requireAuth, requireAdmin, writeLimiter, (req, res) => {
   const parsed = userCreateSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid request' });
@@ -121,18 +140,25 @@ router.delete('/users/:id', requireAuth, requireAdmin, (req, res) => {
   res.status(204).end();
 });
 
-router.patch('/users/:id/password', requireAuth, (req, res) => {
+router.patch('/users/:id/password', requireAuth, writeLimiter, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'invalid id' });
   // 自己或管理员可改
   if (id !== req.user.id && req.user.role !== 'admin') {
     return res.status(403).json({ error: 'forbidden' });
   }
-  const parsed = passwordOnlySchema.safeParse(req.body);
+  const parsed = passwordChangeSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid request' });
   }
-  if (!updatePassword(id, parsed.data.password)) {
+  // 自己改自己时必须验证旧密码；管理员改别人时不需要
+  if (id === req.user.id) {
+    const user = getUserByUsername(req.user.username);
+    if (!user || !bcrypt.compareSync(parsed.data.old_password, user.password_hash)) {
+      return res.status(403).json({ error: 'incorrect password' });
+    }
+  }
+  if (!updatePassword(id, parsed.data.new_password)) {
     return res.status(404).json({ error: 'not found' });
   }
   res.status(204).end();

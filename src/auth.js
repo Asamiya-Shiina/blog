@@ -8,6 +8,10 @@ if (!SECRET) {
   console.error('SESSION_SECRET is not set in .env');
   process.exit(1);
 }
+if (SECRET === 'change-me-to-a-random-string') {
+  console.error('SESSION_SECRET is still the default placeholder — set a real secret in .env');
+  process.exit(1);
+}
 
 const COOKIE_NAME = 'sid';
 const MAX_AGE_SECONDS = 30 * 24 * 60 * 60; // 30 天

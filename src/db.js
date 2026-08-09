@@ -21,7 +21,7 @@ db.exec(`
     password_hash TEXT NOT NULL,
     role          TEXT NOT NULL DEFAULT 'admin'
                     CHECK (role IN ('admin')),
-    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at    TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
   );
   CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
@@ -33,8 +33,8 @@ db.exec(`
     content_md  TEXT NOT NULL,
     status      TEXT NOT NULL DEFAULT 'draft'
                   CHECK (status IN ('draft','published')),
-    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at  TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
   );
   CREATE INDEX IF NOT EXISTS idx_posts_status_updated
     ON posts(status, updated_at DESC);
@@ -47,5 +47,3 @@ function userCount() {
 
 module.exports = db;
 module.exports.userCount = userCount;
-
-module.exports = db;

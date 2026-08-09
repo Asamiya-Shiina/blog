@@ -175,7 +175,7 @@ router.put('/:id', requireAuth, (req, res) => {
 
   db.prepare(`
     UPDATE posts
-    SET title = ?, slug = ?, excerpt = ?, content_md = ?, status = ?, updated_at = datetime('now')
+    SET title = ?, slug = ?, excerpt = ?, content_md = ?, status = ?, updated_at = datetime('now', '+8 hours')
     WHERE id = ?
   `).run(next.title, nextSlug, next.excerpt, next.content_md, next.status, id);
 

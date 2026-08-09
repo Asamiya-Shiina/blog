@@ -97,11 +97,23 @@
         alert('删除失败：' + e.message);
       }
     } else if (btn.dataset.act === 'reset') {
-      const np = prompt(`为「${name}」输入新密码（至少 8 位）`);
-      if (!np) return;
-      if (np.length < 8) { alert('密码至少 8 位'); return; }
+      const isSelf = String(id) === String(currentUser.id);
+      let body;
+      if (isSelf) {
+        const op = prompt('请输入当前密码');
+        if (!op) return;
+        const np = prompt('请输入新密码（至少 8 位）');
+        if (!np) return;
+        if (np.length < 8) { alert('密码至少 8 位'); return; }
+        body = { old_password: op, new_password: np };
+      } else {
+        const np = prompt(`为「${name}」输入新密码（至少 8 位）`);
+        if (!np) return;
+        if (np.length < 8) { alert('密码至少 8 位'); return; }
+        body = { new_password: np };
+      }
       try {
-        await api('PATCH', '/api/users/' + id + '/password', { password: np });
+        await api('PATCH', '/api/users/' + id + '/password', body);
         alert('密码已更新');
       } catch (e) {
         alert('更新失败：' + e.message);

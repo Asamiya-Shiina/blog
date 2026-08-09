@@ -31,6 +31,15 @@ app.use(cookieParser());
 // 反向代理信任（部署到 Nginx/Caddy 等后面时）
 app.set('trust proxy', 1);
 
+// 安全响应头
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
+
 // 首次引导：没有管理员时跳转到设置页
 app.use(setupGuard);
 
@@ -39,8 +48,9 @@ app.use(setupGuard);
 function requireAdminPage(req, res, next) {
   const token = req.cookies && req.cookies[COOKIE_NAME];
   if (verify(token)) return next();
-  if (/\.[a-z0-9]+$/i.test(req.path)) return next();   // 静态资源
-  return res.redirect('/login/');                       // HTML 页面 / 目录
+  // 仅放行明确的静态资源扩展名，避免 /Asamiya/secret.txt 等绕过认证
+  if (/\.(?:css|js|png|jpe?g|gif|svg|ico|woff2?|ttf|eot|map)$/i.test(req.path)) return next();
+  return res.redirect('/login/');
 }
 app.use('/Asamiya/', requireAdminPage);
 
@@ -93,16 +103,18 @@ function notFoundPage(slug) {
 </style></head>
 <body><div class="box">
   <h1>404</h1>
-  <p>找不到文章 <code>${String(slug).replace(/[<>&"]/g, '')}</code></p>
+  <p>找不到文章 <code>${String(slug).replace(/[<>&"']/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[ch]))}</code></p>
   <a href="/posts/">← 所有文章</a>
 </div></body></html>`;
 }
 
-// 静态托管：admin / login 等后台页面（路径里直接挂 public/）
+// 静态托管：admin / login 等后台页面
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 首页、image/、audio/ 直接挂在根
-app.use(express.static(__dirname, { index: 'index.html' }));
+// 根级静态资源（显式列出，避免暴露 data/、node_modules/ 等目录）
+app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.use('/image', express.static(path.join(__dirname, 'image')));
+app.use('/audio', express.static(path.join(__dirname, 'audio')));
 
 // 兜底 404
 app.use((_req, res) => res.status(404).json({ error: 'not found' }));
@@ -111,7 +123,7 @@ app.use((_req, res) => res.status(404).json({ error: 'not found' }));
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
   console.error(err);
-  res.status(err.status || 500).json({ error: err.message || 'internal error' });
+  res.status(err.status || 500).json({ error: 'internal error' });
 });
 
 app.listen(PORT, () => {

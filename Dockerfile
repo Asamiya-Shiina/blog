@@ -12,9 +12,15 @@ COPY . .
 
 RUN chmod +x docker-entrypoint.sh
 
+# 非 root 用户运行
+RUN groupadd -r blog && useradd -r -g blog -d /app -s /sbin/nologin blog \
+    && mkdir -p /app/data && chown -R blog:blog /app
+
 # 数据目录（SQLite + 上传文件），运行时挂载 volume
 VOLUME /app/data
 
 EXPOSE 3000
+
+USER blog
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
