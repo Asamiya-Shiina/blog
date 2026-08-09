@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>初始化设置</title>
+  <style>
+    :root { --fg: #1a1a1a; --muted: #6b6b6b; --accent: #3b82f6; --accent-dark: #2563eb; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                   "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      color: var(--fg);
+      background: url('/image/IMG_20250703_100031.jpeg') center/cover no-repeat fixed;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.40);
+      backdrop-filter: blur(8px) saturate(120%);
+      -webkit-backdrop-filter: blur(8px) saturate(120%);
+      z-index: 0;
+    }
+    .card {
+      position: relative;
+      z-index: 1;
+      width: 380px;
+      max-width: 90vw;
+      padding: 40px 36px;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(20px) saturate(140%);
+      -webkit-backdrop-filter: blur(20px) saturate(140%);
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      animation: fadeUp 0.8s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    h1 {
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-weight: 400;
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 28px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: var(--muted);
+    }
+    input {
+      width: 100%;
+      padding: 10px 14px;
+      font-size: 15px;
+      font-family: inherit;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.7);
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      margin-bottom: 18px;
+    }
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      font-size: 15px;
+      font-weight: 500;
+      font-family: inherit;
+      color: #fff;
+      background: var(--accent);
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+    }
+    button:hover { background: var(--accent-dark); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(59,130,246,0.3); }
+    button:active { transform: translateY(0) scale(0.98); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+    .error {
+      color: #dc2626;
+      font-size: 13px;
+      margin-bottom: 14px;
+      min-height: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>首次设置</h1>
+    <p class="subtitle">创建管理员账号以开始使用</p>
+    <form id="form">
+      <label for="username">用户名</label>
+      <input id="username" name="username" type="text" autocomplete="username"
+             placeholder="admin" required minlength="1" maxlength="64" />
+      <label for="password">密码</label>
+      <input id="password" name="password" type="password" autocomplete="new-password"
+             placeholder="至少 8 位" required minlength="8" maxlength="256" />
+      <label for="confirm">确认密码</label>
+      <input id="confirm" name="confirm" type="password" autocomplete="new-password"
+             placeholder="再输入一次" required minlength="8" maxlength="256" />
+      <div class="error" id="error"></div>
+      <button type="submit" id="btn">创建并登录</button>
+    </form>
+  </div>
+
+  <script>
+    const form = document.getElementById('form');
+    const btn  = document.getElementById('btn');
+    const err  = document.getElementById('error');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      err.textContent = '';
+
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const confirm  = document.getElementById('confirm').value;
+
+      if (password !== confirm) {
+        err.textContent = '两次密码不一致';
+        return;
+      }
+
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || '请求失败');
+        }
+        location.href = '/Asamiya/';
+      } catch (ex) {
+        err.textContent = ex.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

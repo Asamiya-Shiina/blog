@@ -15,6 +15,14 @@ const { renderListPage, renderPostPage } = require('./src/views/posts');
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
+// 首次引导：没有管理员时跳转到设置页
+function setupGuard(req, res, next) {
+  if (db.userCount() > 0) return next();
+  // 放行设置页自身、setup API、静态资源
+  if (req.path.startsWith('/setup') || req.path.startsWith('/api/setup') || req.path.startsWith('/image/')) return next();
+  return res.redirect('/setup/');
+}
+
 // 解析 JSON / urlencoded body
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
@@ -22,6 +30,9 @@ app.use(cookieParser());
 
 // 反向代理信任（部署到 Nginx/Caddy 等后面时）
 app.set('trust proxy', 1);
+
+// 首次引导：没有管理员时跳转到设置页
+app.use(setupGuard);
 
 // 后台 HTML 页面：未登录直接访问 /Asamiya/* 时重定向到登录页
 // 静态资源（带扩展名的 CSS/JS/图片）放行（不带敏感内容）
