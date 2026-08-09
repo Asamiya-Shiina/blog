@@ -1,0 +1,11 @@
+services:
+  blog:
+    image: ghcr.io/asamiya-shiina/blog:latest
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
