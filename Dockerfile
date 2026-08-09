@@ -3,6 +3,10 @@ FROM node:24-slim
 # better-sqlite3 + bcrypt 需要编译工具 + gosu 用于降权
 RUN apt-get update && apt-get install -y python3 make g++ gosu && rm -rf /var/lib/apt/lists/*
 
+# 设置时区为北京时间
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
