@@ -62,7 +62,7 @@ docker compose up -d
 ### 本地开发
 
 ```bash
-# 要求 Node.js >= 18
+# 要求 Node.js >= 24
 git clone git@github.com:Asamiya-Shiina/blog.git
 cd blog
 npm install
