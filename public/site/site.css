@@ -238,6 +238,33 @@ a { color: inherit; }
 }
 .login-btn:hover::before { left: 130%; }
 
+/* —— 搜索按钮 —— */
+.search-btn {
+  position: fixed;
+  top: 36px; right: 36px;
+  z-index: 11;
+  width: 44px; height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--fg);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+.search-btn:hover { transform: scale(1.06); }
+.search-btn:active { transform: scale(0.94); }
+.search-btn svg {
+  width: 19px; height: 19px;
+  fill: none;
+  stroke: var(--fg);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
 /* —— 播放器 —— */
 .player {
   position: fixed;

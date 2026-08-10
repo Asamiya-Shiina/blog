@@ -196,6 +196,13 @@ function renderFloatingUI({ withLogin = false } = {}) {
   `;
 }
 
+function renderSearchButton() {
+  return `
+  <a href="/search/" class="search-btn" aria-label="搜索文章">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+  </a>`;
+}
+
 function renderListPage(posts) {
   const cards = posts.length === 0
     ? `<div class="empty">还没有发布的文章。</div>`
@@ -223,6 +230,7 @@ function renderListPage(posts) {
     </header>
     <section>${cards}</section>
   </main>
+  ${renderSearchButton()}
   ${renderFloatingUI()}
 </body>
 </html>`;
@@ -255,4 +263,140 @@ function renderPostPage(post) {
 </html>`;
 }
 
-module.exports = { renderListPage, renderPostPage };
+function renderSearchPage(q, posts) {
+  const query = String(q || '');
+  let body;
+  if (!query) {
+    body = `<div class="empty">输入关键词，搜索标题、摘要与正文。</div>`;
+  } else if (posts.length === 0) {
+    body = `<div class="empty">没有找到匹配 “${escapeHtml(query)}” 的文章。<br /><a href="/posts/">← 浏览全部文章</a></div>`;
+  } else {
+    body = posts.map(p => `
+        <article class="post-card">
+          <h2><a href="/posts/${encodeURIComponent(p.slug)}/">${escapeHtml(p.title)}</a></h2>
+          <div class="meta">${escapeHtml(formatDate(p.published_at || p.updated_at))}</div>
+          ${p.excerpt ? `<p>${escapeHtml(p.excerpt)}</p>` : ''}
+        </article>
+      `).join('');
+  }
+
+  const count = query ? `<p>共找到 ${posts.length} 篇文章。</p>` : `<p>在已发布的文章中查找。</p>`;
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>搜索${query ? ' · ' + escapeHtml(query) : ''}</title>
+  <meta name="robots" content="noindex" />
+  ${SHARED_HEAD}
+  <style>
+    /* 首次打开搜索页保留入场动画；带查询词（已搜索过）时关掉，结果直接出现 */
+    body.searched header.hero,
+    body.searched header.hero p,
+    body.searched .search-form,
+    body.searched .post-card,
+    body.searched .empty,
+    body.searched .player { animation: none; }
+
+    .search-form {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 40px;
+      animation: fadeUp 0.9s 0.15s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    }
+    .search-form input {
+      flex: 1;
+      padding: 12px 16px;
+      font: inherit;
+      font-size: 15px;
+      color: var(--fg);
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .search-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+    .search-form button {
+      padding: 12px 24px;
+      font: inherit;
+      font-size: 15px;
+      color: #fff;
+      background: var(--accent);
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.2s ease, transform 0.15s ease;
+    }
+    .search-form button:hover { background: var(--accent-dark); }
+    .search-form button:active { transform: scale(0.97); }
+  </style>
+</head>
+<body${query ? ' class="searched"' : ''}>
+  <main class="wrap">
+    <header class="hero">
+      <h1>搜索</h1>
+      ${count}
+    </header>
+    <form class="search-form" action="/search/" method="get" role="search">
+      <input type="search" name="q" value="${escapeHtml(query)}" placeholder="搜索标题、摘要或正文…" autofocus />
+      <button type="submit">搜索</button>
+    </form>
+    <section>${body}</section>
+  </main>
+  ${renderFloatingUI()}
+</body>
+</html>`;
+}
+
+// 提示页（限流等）：复用 site.css，背景与蒙版跟主页保持一致
+function renderNoticePage({ title, heading, message, link = '/posts/', linkText = '← 所有文章' }) {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(title)}</title>
+  <meta name="robots" content="noindex" />
+  <link rel="stylesheet" href="/site/site.css" />
+  <style>
+    .notice {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 32px;
+      animation: fadeUp 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    }
+    .notice h1 {
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-weight: 400;
+      font-size: 36px;
+      margin: 0 0 12px;
+    }
+    .notice p { color: var(--muted); margin: 0 0 28px; max-width: 24em; }
+    .notice a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+      transition: border-color 0.2s ease;
+    }
+    .notice a:hover { border-bottom-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="notice">
+    <h1>${escapeHtml(heading)}</h1>
+    <p>${escapeHtml(message)}</p>
+    <a href="${link}">${escapeHtml(linkText)}</a>
+  </div>
+</body>
+</html>`;
+}
+
+module.exports = { renderListPage, renderPostPage, renderSearchPage, renderNoticePage };

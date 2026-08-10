@@ -5,12 +5,13 @@ require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const cookieParser = require('cookie-parser');
+const rateLimit = require('express-rate-limit');
 
 const db = require('./src/db');
 const authRoutes = require('./src/routes/auth');
 const postsRoutes = require('./src/routes/posts');
 const { verify, COOKIE_NAME } = require('./src/auth');
-const { renderListPage, renderPostPage } = require('./src/views/posts');
+const { renderListPage, renderPostPage, renderSearchPage, renderNoticePage } = require('./src/views/posts');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -82,6 +83,78 @@ app.get(['/posts/:slug', '/posts/:slug/'], (req, res) => {
   `).get(slug);
   if (!post) return res.status(404).type('html').send(notFoundPage(slug));
   res.type('html').send(renderPostPage({ ...post, published_at: post.updated_at }));
+});
+
+// —— 搜索页（无需登录，仅搜已发布文章）——
+// 全文 LIKE 是整表扫描，限流避免被刷
+const SEARCH_WINDOW_MS = 30 * 1000;
+
+function normalizeQuery(raw) {
+  return (typeof raw === 'string' ? raw : '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60);
+}
+
+function tooManySearches(res, message) {
+  return res.status(429).type('html').send(renderNoticePage({
+    title: '搜索太频繁',
+    heading: '茶需慢慢摇，心急则味散',
+    message,
+    link: '/posts/',
+    linkText: '← 所有文章',
+  }));
+}
+
+const searchLimiter = rateLimit({
+  windowMs: SEARCH_WINDOW_MS,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  // 空查询不查库，不占额度
+  skip: req => !normalizeQuery(req.query.q),
+  handler: (_req, res) => tooManySearches(res, '搜索请求太频繁了，请稍等三十秒再试。'),
+});
+
+// 同一个关键词在窗口内重复搜索没有新结果，直接拦下
+const lastSearch = new Map();
+
+function repeatSearchGuard(req, res, next) {
+  const q = normalizeQuery(req.query.q);
+  req.searchQuery = q;
+  if (!q) return next();
+
+  const now = Date.now();
+  if (lastSearch.size > 500) {
+    for (const [ip, entry] of lastSearch) {
+      if (now - entry.at > SEARCH_WINDOW_MS) lastSearch.delete(ip);
+    }
+  }
+
+  const prev = lastSearch.get(req.ip);
+  if (prev && prev.q === q && now - prev.at < SEARCH_WINDOW_MS) {
+    return tooManySearches(res, '刚刚搜过同样的关键词了，换个词或者等三十秒再试。');
+  }
+  lastSearch.set(req.ip, { q, at: now });
+  next();
+}
+
+app.get(['/search', '/search/'], searchLimiter, repeatSearchGuard, (req, res) => {
+  const q = req.searchQuery;
+
+  let rows = [];
+  if (q) {
+    const like = '%' + q.replace(/[\\%_]/g, ch => '\\' + ch) + '%';
+    rows = db.prepare(`
+      SELECT slug, title, excerpt, updated_at, created_at
+      FROM posts
+      WHERE status = 'published'
+        AND (title LIKE ? ESCAPE '\\' OR excerpt LIKE ? ESCAPE '\\' OR content_md LIKE ? ESCAPE '\\')
+      ORDER BY COALESCE(updated_at, created_at) DESC
+      LIMIT 50
+    `).all(like, like, like);
+  }
+  res.type('html').send(renderSearchPage(q, rows.map(r => ({ ...r, published_at: r.updated_at }))));
 });
 
 function notFoundPage(slug) {
