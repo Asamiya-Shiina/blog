@@ -122,7 +122,7 @@
 
       async function loadStatus() {
         try {
-          const status = await api('GET', '/api/status');
+          const status = await api('GET', '/api/data');
           const el = document.getElementById('current-status');
           if (status.active) {
             el.innerHTML = `
@@ -140,7 +140,7 @@
 
       async function loadConfig() {
         try {
-          config = await api('GET', '/api/status/admin/config');
+          config = await api('GET', '/api/data/admin/config');
           renderConfig();
         } catch (e) {
           console.error(e);
@@ -149,7 +149,7 @@
 
       async function saveConfig() {
         try {
-          await api('POST', '/api/status/admin/config', config);
+          await api('POST', '/api/data/admin/config', config);
           showNotice('配置已保存', 'success');
         } catch (e) {
           showNotice('保存失败', 'error');

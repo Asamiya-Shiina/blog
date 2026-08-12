@@ -87,7 +87,7 @@
 
   let evtSource = null;
   function connect() {
-    evtSource = new EventSource('/api/status/stream');
+    evtSource = new EventSource('/api/data/stream');
     evtSource.onmessage = (e) => {
       try { render(JSON.parse(e.data)); } catch {}
     };

@@ -242,7 +242,7 @@
 
     let evtSource = null;
     function connectSSE() {
-      evtSource = new EventSource('/api/status/stream');
+      evtSource = new EventSource('/api/data/stream');
       evtSource.onmessage = (e) => {
         try {
           const data = JSON.parse(e.data);

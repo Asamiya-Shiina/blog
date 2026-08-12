@@ -62,7 +62,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 // 鉴权 / 文章 / 文件路由
 app.use('/api', authRoutes);
 app.use('/api/posts', postsRoutes);
-app.use('/api/status', require('./src/routes/status'));
+app.use('/api/data', require('./src/routes/status'));
 
 // —— 公开文章页（无需登录） ——
 app.get(['/posts', '/posts/'], (_req, res) => {

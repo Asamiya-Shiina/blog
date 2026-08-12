@@ -53,7 +53,7 @@ const statusSchema = z.object({
   deviceName: z.string().max(50).optional().default('default'),
 });
 
-// POST /api/status - 客户端上报状态
+// POST /api/data - 客户端上报状态
 router.post('/', requireAuth, statusLimiter, (req, res) => {
   const parsed = statusSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -68,7 +68,7 @@ router.post('/', requireAuth, statusLimiter, (req, res) => {
   res.json({ ok: true });
 });
 
-// POST /api/status/off - 手动关闭
+// POST /api/data/off - 手动关闭
 router.post('/off', requireAuth, (req, res) => {
   const deviceName = req.body.deviceName || 'default';
   const deviceId = `${req.user.username}_${deviceName}`;
@@ -76,19 +76,19 @@ router.post('/off', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// GET /api/status/config - 客户端拉取配置
+// GET /api/data/config - 客户端拉取配置
 router.get('/config', requireAuth, (req, res) => {
   res.json(getAllConfig());
 });
 
 // ============ 公开 API（无需登录） ============
 
-// GET /api/status - 获取当前状态
+// GET /api/data - 获取当前状态
 router.get('/', (_req, res) => {
   res.json(store.getPublicStatus());
 });
 
-// GET /api/status/stream - SSE 推送
+// GET /api/data/stream - SSE 推送
 router.get('/stream', (req, res) => {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -104,12 +104,12 @@ router.get('/stream', (req, res) => {
 
 // ============ 管理 API（需要登录） ============
 
-// GET /api/status/admin/config - 获取配置
+// GET /api/data/admin/config - 获取配置
 router.get('/admin/config', requireAuth, (req, res) => {
   res.json(getAllConfig());
 });
 
-// POST /api/status/admin/config - 保存配置
+// POST /api/data/admin/config - 保存配置
 const configSchema = z.object({
   blacklist: z.array(z.string().max(100)).optional(),
   blacklistPatterns: z.array(z.string().max(200)).optional(),
