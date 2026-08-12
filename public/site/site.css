@@ -380,3 +380,132 @@ a { color: inherit; }
     touch-action: auto;
   }
 }
+
+/* —— 实时状态卡片（首页） —— */
+.status-card {
+  margin-bottom: 80px;
+}
+.status-card h2 {
+  font-family: Georgia, "Times New Roman", "Songti SC", serif;
+  font-weight: 400;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--muted);
+  margin: 0 0 28px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.status-body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  min-height: 72px;
+  transition: box-shadow 0.3s ease;
+}
+.status-body.is-active {
+  box-shadow: 0 4px 24px rgba(59, 130, 246, 0.1);
+}
+.status-body .status-app-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.status-body.is-active .status-app-icon {
+  background: rgba(59, 130, 246, 0.08);
+}
+.status-body .status-info {
+  flex: 1;
+  min-width: 0;
+}
+.status-body .status-app-name {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.status-body .status-window-title {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.status-body .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ccc;
+  flex-shrink: 0;
+  transition: background 0.3s ease;
+}
+.status-body.is-active .status-dot {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+}
+.status-offline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* 多设备显示 */
+.status-device {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.status-device:last-child {
+  border-bottom: none;
+}
+.status-device .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+  flex-shrink: 0;
+}
+.status-device .status-app-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.status-device .status-info {
+  flex: 1;
+  min-width: 0;
+}
+.status-device .status-app-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.status-device .status-window-title {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

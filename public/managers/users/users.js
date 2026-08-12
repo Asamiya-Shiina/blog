@@ -44,7 +44,7 @@
           username: fd.get('username'),
           password: fd.get('password'),
         });
-        window.location.replace('/Asamiya/');
+        window.location.replace('/managers/');
       } catch (e2) {
         err.textContent = '创建失败：' + e2.message;
         err.classList.add('is-visible');

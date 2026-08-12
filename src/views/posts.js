@@ -172,6 +172,7 @@ function renderFloatingUI({ withLogin = false } = {}) {
   <nav class="nav-menu" id="nav-menu" aria-label="导航">
     <a href="/">首页</a>
     <a href="/search/">搜索</a>
+    <a href="/status/">状态</a>
     <a href="/#about">关于</a>
   </nav>
 
@@ -340,7 +341,7 @@ function renderSearchPage(q, posts) {
       ${count}
     </header>
     <form class="search-form" action="/search/" method="get" role="search">
-      <input type="search" name="q" value="${escapeHtml(query)}" placeholder="搜索标题、摘要或正文…" autofocus />
+      <input type="search" name="q" value="${escapeHtml(query)}" placeholder="搜索标题、摘要或正文…" autofocus required />
       <button type="submit">搜索</button>
     </form>
     <section>${body}</section>
@@ -399,4 +400,4 @@ function renderNoticePage({ title, heading, message, link = '/posts/', linkText 
 </html>`;
 }
 
-module.exports = { renderListPage, renderPostPage, renderSearchPage, renderNoticePage };
+module.exports = { renderListPage, renderPostPage, renderSearchPage, renderNoticePage, renderFloatingUI, SHARED_HEAD };

@@ -165,4 +165,95 @@
       return m + ':' + String(r).padStart(2, '0');
     }
   }
+
+  // —— 实时状态 ——
+  const statusSection = document.getElementById('status-section');
+  const statusBody = document.getElementById('status-body');
+  if (statusSection && statusBody) {
+    const appIcons = {
+      'code': '📝',
+      'chrome': '🌐',
+      'firefox': '🐧',
+      'msedge': '🌐',
+      'idea64': '⚙️',
+      'obsidian': '📚',
+      'figma': '🎨',
+      'typora': '✍️',
+      'notion': '📓',
+      'spotify': '🎵',
+      'discord': '💬',
+      'windowsterminal': '⌨️',
+      'explorer': '📂',
+    };
+
+    function getIcon(iconKey) {
+      return appIcons[iconKey] || '💻';
+    }
+
+    function updateStatusCard(data) {
+      // data 现在是 { devices: [...] } 格式，只显示最新的一个
+      const devices = data && data.devices ? data.devices : [];
+
+      if (devices.length === 0) {
+        statusBody.classList.remove('is-active');
+        statusBody.innerHTML = `
+          <div class="status-offline">
+            <span class="status-dot"></span>
+            <span>当前离线</span>
+          </div>`;
+        return;
+      }
+
+      statusBody.classList.add('is-active');
+      const device = devices[0]; // 最新的设备
+
+      // 休息状态特殊显示
+      if (device.icon === 'break') {
+        statusBody.innerHTML = `
+          <span class="status-dot"></span>
+          <div class="status-app-icon">☕</div>
+          <div class="status-info">
+            <div class="status-app-name">${escapeHtml(device.app)}</div>
+          </div>`;
+        return;
+      }
+
+      const icon = getIcon(device.icon);
+      const titleHtml = device.title
+        ? `<div class="status-window-title" title="${escapeAttr(device.title)}">${escapeHtml(device.title)}</div>`
+        : '';
+      statusBody.innerHTML = `
+        <span class="status-dot"></span>
+        <div class="status-app-icon">${icon}</div>
+        <div class="status-info">
+          <div class="status-app-name">${escapeHtml(device.app)}</div>
+          ${titleHtml}
+        </div>`;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[c]));
+    }
+    function escapeAttr(s) {
+      return escapeHtml(s).replace(/"/g, '&quot;');
+    }
+
+    let evtSource = null;
+    function connectSSE() {
+      evtSource = new EventSource('/api/status/stream');
+      evtSource.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          updateStatusCard(data);
+        } catch {}
+      };
+      evtSource.onerror = () => {
+        evtSource.close();
+        setTimeout(connectSSE, 5000);
+      };
+    }
+    connectSSE();
+  }
 })();

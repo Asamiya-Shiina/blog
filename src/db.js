@@ -39,7 +39,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_posts_status_updated
     ON posts(status, updated_at DESC);
 
+  CREATE TABLE IF NOT EXISTS status_config (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
 `);
+
+// 初始化默认状态配置
+const defaultConfig = {
+  blacklist: JSON.stringify(['1Password', 'KeePass', 'LastPass', 'Bitwarden', 'Windows Security', 'Task Manager', 'Registry Editor', 'cmd', 'powershell']),
+  blacklistPatterns: JSON.stringify(['.*密码.*', '.*password.*']),
+  appNames: JSON.stringify({ 'Code': 'VS Code', 'chrome': 'Chrome', 'firefox': 'Firefox', 'msedge': 'Edge', 'idea64': 'IntelliJ IDEA', 'Obsidian': 'Obsidian', 'Figma': 'Figma', 'Typora': 'Typora', 'notion': 'Notion', 'Spotify': 'Spotify', 'Discord': 'Discord', 'WindowsTerminal': 'Windows Terminal' }),
+  appNamePatterns: JSON.stringify([{ pattern: '^explorer$', name: '文件资源管理器' }]),
+  titleApps: JSON.stringify(['Code', 'chrome', 'firefox', 'msedge', 'idea64', 'Obsidian', 'Typora', 'notion']),
+};
+
+const insertConfig = db.prepare('INSERT OR IGNORE INTO status_config (key, value) VALUES (?, ?)');
+for (const [key, value] of Object.entries(defaultConfig)) {
+  insertConfig.run(key, value);
+}
 
 function userCount() {
   return db.prepare('SELECT COUNT(*) AS n FROM users').get().n;

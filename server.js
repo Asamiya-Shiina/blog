@@ -12,6 +12,7 @@ const authRoutes = require('./src/routes/auth');
 const postsRoutes = require('./src/routes/posts');
 const { verify, COOKIE_NAME } = require('./src/auth');
 const { renderListPage, renderPostPage, renderSearchPage, renderNoticePage } = require('./src/views/posts');
+const { renderStatusPage } = require('./src/views/status-page');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -44,16 +45,16 @@ app.use((_req, res, next) => {
 // 首次引导：没有管理员时跳转到设置页
 app.use(setupGuard);
 
-// 后台 HTML 页面：未登录直接访问 /Asamiya/* 时重定向到登录页
+// 后台 HTML 页面：未登录直接访问 /managers/* 时重定向到登录页
 // 静态资源（带扩展名的 CSS/JS/图片）放行（不带敏感内容）
 function requireAdminPage(req, res, next) {
   const token = req.cookies && req.cookies[COOKIE_NAME];
   if (verify(token)) return next();
-  // 仅放行明确的静态资源扩展名，避免 /Asamiya/secret.txt 等绕过认证
+  // 仅放行明确的静态资源扩展名，避免 /managers/secret.txt 等绕过认证
   if (/\.(?:css|js|png|jpe?g|gif|svg|ico|woff2?|ttf|eot|map)$/i.test(req.path)) return next();
   return res.redirect('/login/');
 }
-app.use('/Asamiya/', requireAdminPage);
+app.use('/managers/', requireAdminPage);
 
 // 健康检查
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
@@ -61,6 +62,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 // 鉴权 / 文章 / 文件路由
 app.use('/api', authRoutes);
 app.use('/api/posts', postsRoutes);
+app.use('/api/status', require('./src/routes/status'));
 
 // —— 公开文章页（无需登录） ——
 app.get(['/posts', '/posts/'], (_req, res) => {
@@ -155,6 +157,11 @@ app.get(['/search', '/search/'], searchLimiter, repeatSearchGuard, (req, res) =>
     `).all(like, like, like);
   }
   res.type('html').send(renderSearchPage(q, rows.map(r => ({ ...r, published_at: r.updated_at }))));
+});
+
+// —— 实时状态页（无需登录） ——
+app.get(['/status', '/status/'], (_req, res) => {
+  res.type('html').send(renderStatusPage());
 });
 
 function notFoundPage(slug) {

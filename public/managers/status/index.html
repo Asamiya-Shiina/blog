@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Asamiya · 状态管理</title>
+  <link rel="stylesheet" href="/managers/admin.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a class="brand" href="/managers/">Asamiya</a>
+      <nav>
+        <a href="/managers/">概览</a>
+        <a href="/managers/posts">文章</a>
+        <a href="/managers/users">用户</a>
+        <a href="/managers/status" class="is-active">状态</a>
+        <a href="/" target="_blank" rel="noopener">查看站点 ↗</a>
+      </nav>
+      <div class="spacer"></div>
+      <span class="user" id="admin-nav-user"></span>
+      <button class="logout" id="admin-logout" type="button">退出</button>
+    </header>
+
+    <main class="container">
+      <div class="notice" id="notice"></div>
+
+      <!-- 当前状态 -->
+      <div class="card">
+        <h2>当前状态</h2>
+        <div class="status-info" id="current-status">
+          <p>加载中...</p>
+        </div>
+      </div>
+
+      <!-- 黑名单管理 -->
+      <div class="card">
+        <h2>黑名单</h2>
+        <p class="help">匹配这些名称的应用不会被上报。</p>
+        <div id="blacklist-list"></div>
+        <div class="toolbar" style="margin-top: 12px;">
+          <input type="text" id="blacklist-input" placeholder="输入进程名，如 chrome" />
+          <button class="btn btn-primary" onclick="addBlacklist()">添加</button>
+        </div>
+      </div>
+
+      <!-- 黑名单模式 -->
+      <div class="card">
+        <h2>黑名单模式（正则）</h2>
+        <p class="help">匹配这些正则表达式的窗口标题或进程名不会被上报。</p>
+        <div id="patterns-list"></div>
+        <div class="toolbar" style="margin-top: 12px;">
+          <input type="text" id="pattern-input" placeholder="输入正则，如 .*密码.*" />
+          <button class="btn btn-primary" onclick="addPattern()">添加</button>
+        </div>
+      </div>
+
+      <!-- 应用名映射 -->
+      <div class="card">
+        <h2>应用名映射</h2>
+        <p class="help">将进程名映射为友好的显示名称（精确匹配）。</p>
+        <div id="mapping-list"></div>
+        <div class="toolbar" style="margin-top: 12px;">
+          <input type="text" id="mapping-key" placeholder="进程名" style="width: 140px;" />
+          <input type="text" id="mapping-value" placeholder="显示名" style="width: 140px;" />
+          <button class="btn btn-primary" onclick="addMapping()">添加</button>
+        </div>
+      </div>
+
+      <!-- 应用名模式 -->
+      <div class="card">
+        <h2>应用名模式（正则）</h2>
+        <p class="help">用正则表达式匹配进程名，同一开头的进程可归为一类。优先级低于精确映射。</p>
+        <div id="app-patterns-list"></div>
+        <div class="toolbar" style="margin-top: 12px;">
+          <input type="text" id="app-pattern-regex" placeholder="正则，如 ^python" style="width: 160px;" />
+          <input type="text" id="app-pattern-name" placeholder="显示名" style="width: 140px;" />
+          <button class="btn btn-primary" onclick="addAppPattern()">添加</button>
+        </div>
+      </div>
+
+      <!-- 标题应用 -->
+      <div class="card">
+        <h2>显示标题的应用</h2>
+        <p class="help">这些应用会显示完整的窗口标题，其他应用只显示应用名。</p>
+        <div id="title-apps-list"></div>
+        <div class="toolbar" style="margin-top: 12px;">
+          <input type="text" id="title-app-input" placeholder="输入进程名" />
+          <button class="btn btn-primary" onclick="addTitleApp()">添加</button>
+        </div>
+      </div>
+
+      <!-- 标题应用模式 -->
+      <div class="card">
+        <h2>标题应用模式（正则）</h2>
+        <p class="help">匹配正则的进程会显示完整的窗口标题。</p>
+        <div id="title-app-patterns-list"></div>
+        <div class="toolbar" style="margin-top: 12px;">
+          <input type="text" id="title-app-pattern-input" placeholder="正则，如 ^python" />
+          <button class="btn btn-primary" onclick="addTitleAppPattern()">添加</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/managers/admin.js"></script>
+  <script>
+    (async () => {
+      const { api, escapeHtml, bindNav } = window.admin;
+      let user;
+      try { user = await window.admin.guard(); } catch { return; }
+      bindNav(user);
+
+      let config = {};
+
+      function showNotice(msg, type = 'info') {
+        const el = document.getElementById('notice');
+        el.textContent = msg;
+        el.className = 'notice is-visible ' + type;
+        setTimeout(() => el.classList.remove('is-visible'), 3000);
+      }
+
+      async function loadStatus() {
+        try {
+          const status = await api('GET', '/api/status');
+          const el = document.getElementById('current-status');
+          if (status.active) {
+            el.innerHTML = `
+              <p><strong>在线</strong> - ${escapeHtml(status.app)}</p>
+              ${status.title ? '<p>' + escapeHtml(status.title) + '</p>' : ''}
+              <p class="help">最后更新: ${new Date(status.updatedAt).toLocaleString()}</p>
+            `;
+          } else {
+            el.innerHTML = '<p><em>离线</em></p>';
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      async function loadConfig() {
+        try {
+          config = await api('GET', '/api/status/admin/config');
+          renderConfig();
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      async function saveConfig() {
+        try {
+          await api('POST', '/api/status/admin/config', config);
+          showNotice('配置已保存', 'success');
+        } catch (e) {
+          showNotice('保存失败', 'error');
+        }
+      }
+
+      function renderConfig() {
+        // 黑名单
+        const bl = document.getElementById('blacklist-list');
+        bl.innerHTML = (config.blacklist || []).map(item => `
+          <span class="tag">${escapeHtml(item)} <span class="tag-remove" onclick="removeBlacklist('${escapeHtml(item)}')">×</span></span>
+        `).join('') || '<span class="help">暂无</span>';
+
+        // 黑名单模式
+        const patterns = document.getElementById('patterns-list');
+        patterns.innerHTML = (config.blacklistPatterns || []).map(item => `
+          <span class="tag"><code>${escapeHtml(item)}</code> <span class="tag-remove" onclick="removePattern('${escapeHtml(item)}')">×</span></span>
+        `).join('') || '<span class="help">暂无</span>';
+
+        // 应用名映射
+        const mappings = document.getElementById('mapping-list');
+        mappings.innerHTML = Object.entries(config.appNames || {}).map(([k, v]) => `
+          <span class="tag">${escapeHtml(k)} → ${escapeHtml(v)} <span class="tag-remove" onclick="removeMapping('${escapeHtml(k)}')">×</span></span>
+        `).join('') || '<span class="help">暂无</span>';
+
+        // 应用名模式
+        const appPatterns = document.getElementById('app-patterns-list');
+        appPatterns.innerHTML = (config.appNamePatterns || []).map((item, i) => `
+          <span class="tag"><code>${escapeHtml(item.pattern)}</code> → ${escapeHtml(item.name)} <span class="tag-remove" onclick="removeAppPattern(${i})">×</span></span>
+        `).join('') || '<span class="help">暂无</span>';
+
+        // 标题应用
+        const titleApps = document.getElementById('title-apps-list');
+        titleApps.innerHTML = (config.titleApps || []).map(item => `
+          <span class="tag">${escapeHtml(item)} <span class="tag-remove" onclick="removeTitleApp('${escapeHtml(item)}')">×</span></span>
+        `).join('') || '<span class="help">暂无</span>';
+
+        // 标题应用模式
+        const titleAppPatterns = document.getElementById('title-app-patterns-list');
+        titleAppPatterns.innerHTML = (config.titleAppPatterns || []).map((item, i) => `
+          <span class="tag"><code>${escapeHtml(item.pattern)}</code> <span class="tag-remove" onclick="removeTitleAppPattern(${i})">×</span></span>
+        `).join('') || '<span class="help">暂无</span>';
+      }
+
+      // 黑名单操作
+      window.addBlacklist = async () => {
+        const input = document.getElementById('blacklist-input');
+        const item = input.value.trim();
+        if (!item) return;
+        if (!config.blacklist) config.blacklist = [];
+        if (!config.blacklist.includes(item)) {
+          config.blacklist.push(item);
+          await saveConfig();
+        }
+        input.value = '';
+      };
+
+      window.removeBlacklist = async (item) => {
+        config.blacklist = (config.blacklist || []).filter(b => b !== item);
+        await saveConfig();
+      };
+
+      // 黑名单模式操作
+      window.addPattern = async () => {
+        const input = document.getElementById('pattern-input');
+        const item = input.value.trim();
+        if (!item) return;
+        if (!config.blacklistPatterns) config.blacklistPatterns = [];
+        if (!config.blacklistPatterns.includes(item)) {
+          config.blacklistPatterns.push(item);
+          await saveConfig();
+        }
+        input.value = '';
+      };
+
+      window.removePattern = async (item) => {
+        config.blacklistPatterns = (config.blacklistPatterns || []).filter(p => p !== item);
+        await saveConfig();
+      };
+
+      // 应用名映射操作
+      window.addMapping = async () => {
+        const key = document.getElementById('mapping-key').value.trim();
+        const value = document.getElementById('mapping-value').value.trim();
+        if (!key || !value) return;
+        if (!config.appNames) config.appNames = {};
+        config.appNames[key] = value;
+        await saveConfig();
+        document.getElementById('mapping-key').value = '';
+        document.getElementById('mapping-value').value = '';
+      };
+
+      window.removeMapping = async (key) => {
+        delete config.appNames[key];
+        await saveConfig();
+      };
+
+      // 应用名模式操作
+      window.addAppPattern = async () => {
+        const regex = document.getElementById('app-pattern-regex').value.trim();
+        const name = document.getElementById('app-pattern-name').value.trim();
+        if (!regex || !name) return;
+        try { new RegExp(regex); } catch (e) { showNotice('正则语法错误: ' + e.message, 'error'); return; }
+        if (!config.appNamePatterns) config.appNamePatterns = [];
+        config.appNamePatterns.push({ pattern: regex, name });
+        await saveConfig();
+        document.getElementById('app-pattern-regex').value = '';
+        document.getElementById('app-pattern-name').value = '';
+      };
+
+      window.removeAppPattern = async (index) => {
+        config.appNamePatterns = (config.appNamePatterns || []).filter((_, i) => i !== index);
+        await saveConfig();
+      };
+
+      // 标题应用操作
+      window.addTitleApp = async () => {
+        const input = document.getElementById('title-app-input');
+        const item = input.value.trim();
+        if (!item) return;
+        if (!config.titleApps) config.titleApps = [];
+        if (!config.titleApps.includes(item)) {
+          config.titleApps.push(item);
+          await saveConfig();
+        }
+        input.value = '';
+      };
+
+      window.removeTitleApp = async (item) => {
+        config.titleApps = (config.titleApps || []).filter(p => p !== item);
+        await saveConfig();
+      };
+
+      // 标题应用模式操作
+      window.addTitleAppPattern = async () => {
+        const input = document.getElementById('title-app-pattern-input');
+        const regex = input.value.trim();
+        if (!regex) return;
+        try { new RegExp(regex); } catch (e) { showNotice('正则语法错误: ' + e.message, 'error'); return; }
+        if (!config.titleAppPatterns) config.titleAppPatterns = [];
+        config.titleAppPatterns.push({ pattern: regex });
+        await saveConfig();
+        input.value = '';
+      };
+
+      window.removeTitleAppPattern = async (index) => {
+        config.titleAppPatterns = (config.titleAppPatterns || []).filter((_, i) => i !== index);
+        await saveConfig();
+      };
+
+      // 初始加载
+      await Promise.all([loadStatus(), loadConfig()]);
+
+      // 定时刷新状态
+      setInterval(loadStatus, 5000);
+    })();
+  </script>
+
+  <style>
+    .status-info p { margin: 4px 0; }
+    .help { color: var(--muted); font-size: 13px; margin: 4px 0 8px; }
+    .tag {
+      display: inline-block;
+      padding: 4px 10px;
+      background: rgba(0,0,0,0.05);
+      border-radius: 6px;
+      font-size: 13px;
+      margin: 3px;
+    }
+    .tag-remove {
+      cursor: pointer;
+      margin-left: 6px;
+      color: var(--muted);
+    }
+    .tag-remove:hover { color: var(--danger); }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .toolbar input {
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+    }
+    .toolbar input:focus { border-color: var(--accent); }
+  </style>
+</body>
+</html>

@@ -4,17 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Asamiya · 首页</title>
-  <link rel="stylesheet" href="/Asamiya/admin.css" />
+  <link rel="stylesheet" href="/managers/admin.css" />
 </head>
 <body>
   <div class="page">
 
     <header class="topbar">
-      <a class="brand" href="/Asamiya/">Asamiya</a>
+      <a class="brand" href="/managers/">Asamiya</a>
       <nav>
-        <a href="/Asamiya/" class="is-active">概览</a>
-        <a href="/Asamiya/posts">文章</a>
-        <a href="/Asamiya/users">用户</a>
+        <a href="/managers/" class="is-active">概览</a>
+        <a href="/managers/posts">文章</a>
+        <a href="/managers/users">用户</a>
+        <a href="/managers/status">状态</a>
         <a href="/" target="_blank" rel="noopener">查看站点 ↗</a>
       </nav>
       <div class="spacer"></div>
@@ -38,8 +39,8 @@
       <div class="card" style="margin-top:24px">
         <h2>快速操作</h2>
         <div class="toolbar" style="margin-bottom:0">
-          <a class="btn btn-primary" href="/Asamiya/editor">+ 新建文章</a>
-          <a class="btn btn-ghost" href="/Asamiya/posts">管理文章</a>
+          <a class="btn btn-primary" href="/managers/editor">+ 新建文章</a>
+          <a class="btn btn-ghost" href="/managers/posts">管理文章</a>
         </div>
       </div>
 
@@ -52,7 +53,7 @@
 
   </div>
 
-  <script src="/Asamiya/admin.js"></script>
+  <script src="/managers/admin.js"></script>
   <script>
     (async () => {
       const { api } = window.admin;
@@ -69,10 +70,10 @@
           .slice(0, 6);
         const wrap = document.getElementById('recent');
         if (recent.length === 0) {
-          wrap.innerHTML = '<div class="empty">还没有文章。<a href="/Asamiya/editor">写一篇 →</a></div>';
+          wrap.innerHTML = '<div class="empty">还没有文章。<a href="/managers/editor">写一篇 →</a></div>';
         } else {
           wrap.innerHTML = recent.map(p => `
-            <div class="row" style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="window.location.href='/Asamiya/editor?id=${p.id}'">
+            <div class="row" style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="window.location.href='/managers/editor?id=${p.id}'">
               <span class="tag ${p.status === 'published' ? 'tag-published' : 'tag-draft'}">${p.status === 'published' ? '已发布' : '草稿'}</span>
               <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${window.admin.escapeHtml(p.title)}</span>
               <span style="color:var(--muted);font-size:12px">${(p.updated_at || '').replace('T', ' ').slice(0, 16)}</span>

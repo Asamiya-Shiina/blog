@@ -221,7 +221,7 @@
               body: JSON.stringify({ username, password }),
             });
             if (res.status === 204) {
-              window.location.href = '/Asamiya/';
+              window.location.href = '/managers/';
               return;
             }
             if (res.status === 429) { showError('尝试次数过多，请稍后再试'); return; }
@@ -286,7 +286,7 @@
               body: JSON.stringify({ username, password }),
             });
             if (res.status === 201) {
-              window.location.href = '/Asamiya/';
+              window.location.href = '/managers/';
               return;
             }
             const data = await res.json().catch(() => ({}));
