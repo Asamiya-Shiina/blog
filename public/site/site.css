@@ -383,18 +383,7 @@ a { color: inherit; }
 
 /* —— 实时状态卡片（首页） —— */
 .status-card {
-  margin-bottom: 80px;
-}
-.status-card h2 {
-  font-family: Georgia, "Times New Roman", "Songti SC", serif;
-  font-weight: 400;
-  font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  color: var(--muted);
-  margin: 0 0 28px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
+  margin-top: 28px;
 }
 .status-body {
   display: flex;

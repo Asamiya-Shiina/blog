@@ -129,7 +129,7 @@ function renderStatusPage() {
   <main class="wrap narrow">
     <header class="status-hero">
       <h1>实时状态</h1>
-      <p>看看我正在用什么。</p>
+      <p>欢迎来视奸我,谢谢喵</p>
     </header>
 
     <div class="status-panel">
