@@ -5,22 +5,31 @@
 ## 功能
 
 **前台**
-- 首页：个人介绍、技能展示、联系方式
+- 首页：个人介绍、技能展示、实时状态卡片、联系方式
 - 文章列表与详情页（服务端渲染）
+- 文章搜索（带限流防刷）
+- 实时状态页（SSE 推送，多设备支持）
 - Markdown 渲染（支持 GFM）
 - 可拖拽的音乐播放器
 
-**后台管理** (`/Asamiya/`)
+**后台管理** (`/managers/`)
 - 仪表盘：文章统计、快捷操作
 - 文章管理：分页列表、搜索、状态筛选（草稿/已发布）
 - Markdown 编辑器：分栏实时预览
 - 用户管理：创建账号、重置密码、删除用户
+- 状态配置：黑名单、应用名映射、标题显示规则
+
+**状态上报客户端** (`client/`)
+- Windows 桌面客户端（Python + PyInstaller）
+- 检测前台窗口，自动上报当前使用的应用
+- 支持黑名单过滤、应用名映射、自定义设备名
+- 系统托盘最小化
 
 **安全**
 - HMAC-SHA256 Session 认证（httpOnly Cookie，30 天有效期）
 - bcrypt 密码哈希（cost 12）
 - Zod 请求校验 + DOMPurify HTML 消毒
-- 登录/注册/写入速率限制
+- 登录/注册/写入/搜索速率限制
 - 安全响应头（X-Content-Type-Options、X-Frame-Options 等）
 - 防用户名枚举
 
@@ -41,7 +50,7 @@
 
 ### Docker 部署（推荐）
 
-```bash
+```yaml
 # docker-compose.yml
 services:
   blog:
@@ -91,20 +100,26 @@ npm start
 ## 项目结构
 
 ```
+├── server.js              # Express 入口
 ├── src/
-│   ├── server.js          # Express 入口
 │   ├── db.js              # SQLite 初始化与 Schema
 │   ├── auth.js            # 认证逻辑（Session、密码、中间件）
+│   ├── status-store.js    # 实时状态内存存储 + SSE 广播
 │   ├── routes/
 │   │   ├── auth.js        # 认证 API（登录、注册、用户管理）
-│   │   └── posts.js       # 文章 API（CRUD、搜索）
+│   │   ├── posts.js       # 文章 API（CRUD、预览）
+│   │   └── status.js      # 状态 API（上报、配置、SSE 流）
 │   └── views/
-│       └── posts.js       # 前台页面服务端渲染
+│       ├── posts.js       # 前台页面服务端渲染
+│       └── status-page.js # 状态详情页渲染
 ├── public/
-│   ├── Asamiya/           # 后台管理面板
+│   ├── managers/          # 后台管理面板
 │   ├── login/             # 登录页
 │   ├── setup/             # 初始化设置页
 │   └── site/              # 前台公共样式与脚本
+├── client/
+│   ├── status_client.py   # Windows 状态上报客户端源码
+│   └── 状态客户端.spec     # PyInstaller 打包配置
 ├── index.html             # 首页
 ├── Dockerfile
 ├── docker-compose.yml
