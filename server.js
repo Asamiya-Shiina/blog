@@ -1,5 +1,6 @@
 'use strict';
 
+// 加载 .env 环境变量（SESSION_SECRET、COOKIE_SECURE 等）
 require('dotenv').config();
 
 const path = require('path');
@@ -17,38 +18,50 @@ const { renderStatusPage } = require('./src/views/status-page');
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
-// 首次引导：没有管理员时跳转到设置页
+// —— 首次引导守卫 ——
+// 没有管理员账号时，所有请求重定向到 /setup/ 初始化页面
+// 放行设置页自身、setup API 和图片资源
 function setupGuard(req, res, next) {
   if (db.userCount() > 0) return next();
-  // 放行设置页自身、setup API、静态资源
   if (req.path.startsWith('/setup') || req.path.startsWith('/api/setup') || req.path.startsWith('/image/')) return next();
   return res.redirect('/setup/');
 }
 
-// 解析 JSON / urlencoded body
+// —— 中间件注册 ——
+// JSON 请求体限制 1MB，防止恶意大 payload
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
+// 解析 Cookie，供 session 验证使用
 app.use(cookieParser());
 
-// 反向代理信任（部署到 Nginx/Caddy 等后面时）
+// 反向代理信任层数，通过环境变量配置
+// 部署在 Nginx/Caddy 后面时需要设置，否则 X-Forwarded-For 可被伪造
 app.set('trust proxy', parseInt(process.env.TRUST_PROXY || '1', 10));
 
-// 安全响应头
+// —— 安全响应头 ——
+// 所有响应统一设置安全头，防止 MIME 嗅探、点击劫持、XSS 等攻击
 app.use((_req, res, next) => {
+  // 禁止浏览器猜测 MIME 类型
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  // 禁止被嵌入 iframe（防点击劫持）
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  // 控制 Referer 信息泄露
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // 禁用摄像头、麦克风、地理位置等浏览器 API
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  // 内容安全策略：只允许加载同源资源，允许内联脚本/样式
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'");
+  // HSTS：强制浏览器在一年内使用 HTTPS 访问
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   next();
 });
 
-// 首次引导：没有管理员时跳转到设置页
+// 首次引导守卫（放在安全头之后，路由之前）
 app.use(setupGuard);
 
-// 后台 HTML 页面：未登录直接访问 /managers/* 时重定向到登录页
-// 静态资源（带扩展名的 CSS/JS/图片）放行（不带敏感内容）
+// —— 后台页面鉴权 ——
+// /managers/* 下的所有 HTML 页面需要管理员登录才能访问
+// 带扩展名的静态资源（CSS/JS/图片）放行，不包含敏感内容
 function requireAdminPage(req, res, next) {
   const token = req.cookies && req.cookies[COOKIE_NAME];
   const session = verify(token);
@@ -62,15 +75,17 @@ function requireAdminPage(req, res, next) {
 }
 app.use('/managers/', requireAdminPage);
 
-// 健康检查
+// —— 健康检查端点（Docker HEALTHCHECK 使用） ——
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-// 鉴权 / 文章 / 文件路由
-app.use('/api', authRoutes);
-app.use('/api/posts', postsRoutes);
-app.use('/api/data', require('./src/routes/status'));
+// —— API 路由挂载 ——
+app.use('/api', authRoutes);            // 登录、注册、用户管理
+app.use('/api/posts', postsRoutes);     // 文章 CRUD
+app.use('/api/data', require('./src/routes/status'));  // 实时状态上报与查询
 
 // —— 公开文章页（无需登录） ——
+
+// 文章列表页：只展示已发布文章，按更新时间倒序
 app.get(['/posts', '/posts/'], (_req, res) => {
   const rows = db.prepare(`
     SELECT slug, title, excerpt, updated_at, created_at
@@ -78,10 +93,10 @@ app.get(['/posts', '/posts/'], (_req, res) => {
     WHERE status = 'published'
     ORDER BY COALESCE(updated_at, created_at) DESC
   `).all();
-  // 用 updated_at 当发布日期；若有需要以后加 published_at 字段
   res.type('html').send(renderListPage(rows.map(r => ({ ...r, published_at: r.updated_at }))));
 });
 
+// 文章详情页：通过 slug 查找已发布文章，不存在返回 404
 app.get(['/posts/:slug', '/posts/:slug/'], (req, res) => {
   const slug = req.params.slug;
   const post = db.prepare(`
@@ -94,9 +109,12 @@ app.get(['/posts/:slug', '/posts/:slug/'], (req, res) => {
 });
 
 // —— 搜索页（无需登录，仅搜已发布文章）——
-// 全文 LIKE 是整表扫描，限流避免被刷
+// 全文 LIKE 是整表扫描，需要限流防止被恶意刷请求
+
+// 搜索窗口：30 秒内
 const SEARCH_WINDOW_MS = 30 * 1000;
 
+// 标准化搜索词：合并空白、去首尾空格、截断到 60 字符
 function normalizeQuery(raw) {
   return (typeof raw === 'string' ? raw : '')
     .replace(/\s+/g, ' ')
@@ -104,6 +122,7 @@ function normalizeQuery(raw) {
     .slice(0, 60);
 }
 
+// 搜索过于频繁时的提示页
 function tooManySearches(res, message) {
   return res.status(429).type('html').send(renderNoticePage({
     title: '搜索太频繁',
@@ -114,17 +133,18 @@ function tooManySearches(res, message) {
   }));
 }
 
+// 搜索限流：30 秒内最多 10 次，空查询不计数
 const searchLimiter = rateLimit({
   windowMs: SEARCH_WINDOW_MS,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  // 空查询不查库，不占额度
   skip: req => !normalizeQuery(req.query.q),
   handler: (_req, res) => tooManySearches(res, '搜索请求太频繁了，请稍等三十秒再试。'),
 });
 
-// 同一个关键词在窗口内重复搜索没有新结果，直接拦下
+// 重复搜索拦截：同一 IP 在窗口内搜相同关键词直接返回提示
+// 防止用户反复刷新浪费数据库查询
 const lastSearch = new Map();
 
 function repeatSearchGuard(req, res, next) {
@@ -133,11 +153,12 @@ function repeatSearchGuard(req, res, next) {
   if (!q) return next();
 
   const now = Date.now();
+  // Map 超过 500 条时清理过期条目
   if (lastSearch.size > 500) {
     for (const [ip, entry] of lastSearch) {
       if (now - entry.at > SEARCH_WINDOW_MS) lastSearch.delete(ip);
     }
-    // 强制清理：超过 1000 条时全部清空，防止内存泄漏
+    // 超过 1000 条强制清空，防止内存泄漏
     if (lastSearch.size > 1000) lastSearch.clear();
   }
 
@@ -149,11 +170,13 @@ function repeatSearchGuard(req, res, next) {
   next();
 }
 
+// 搜索路由：限流 → 去重 → 查询 → 渲染
 app.get(['/search', '/search/'], searchLimiter, repeatSearchGuard, (req, res) => {
   const q = req.searchQuery;
 
   let rows = [];
   if (q) {
+    // 转义 LIKE 通配符（\、%、_），防止注入
     const like = '%' + q.replace(/[\\%_]/g, ch => '\\' + ch) + '%';
     rows = db.prepare(`
       SELECT slug, title, excerpt, updated_at, created_at
@@ -172,6 +195,7 @@ app.get(['/status', '/status/'], (_req, res) => {
   res.type('html').send(renderStatusPage());
 });
 
+// —— 文章 404 页面（内联 HTML，带 XSS 转义） ——
 function notFoundPage(slug) {
   return `<!DOCTYPE html>
 <html lang="zh-CN"><head>
@@ -196,15 +220,16 @@ function notFoundPage(slug) {
 </div></body></html>`;
 }
 
-// 静态托管：admin / login 等后台页面
+// —— 静态文件托管 ——
+// public/ 目录包含 login、setup、managers 等后台页面
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 根级静态资源（显式列出，避免暴露 data/、node_modules/ 等目录）
+// 根级资源：首页、图片、音频（显式列出，避免暴露 data/、node_modules/）
 app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.use('/image', express.static(path.join(__dirname, 'image')));
 app.use('/audio', express.static(path.join(__dirname, 'audio')));
 
-// 兜底 404
+// —— 兜底 404（所有路由未匹配时） ——
 app.use((_req, res) => {
   res.status(404).type('html').send(`<!DOCTYPE html>
 <html lang="zh-CN"><head>
@@ -258,7 +283,8 @@ app.use((_req, res) => {
 </body></html>`);
 });
 
-// 全局错误处理
+// —— 全局错误处理 ——
+// 开发环境输出完整错误对象（含堆栈），生产环境只输出消息
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
   if (process.env.NODE_ENV !== 'production') {
@@ -269,6 +295,7 @@ app.use((err, _req, res, _next) => {
   res.status(err.status || 500).json({ error: 'internal error' });
 });
 
+// 启动 HTTP 服务
 app.listen(PORT, () => {
   console.log(`blog server listening on http://localhost:${PORT}`);
 });

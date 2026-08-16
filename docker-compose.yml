@@ -14,7 +14,7 @@ services:
         limits:
           memory: 512M
           cpus: '1.0'
-    pids_limit: 100
+          pids: 100
     read_only: true
     tmpfs:
       - /tmp

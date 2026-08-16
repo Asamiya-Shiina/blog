@@ -1,21 +1,29 @@
 'use strict';
 
+// —— 文章页面视图模块 ——
+// 服务端渲染 HTML：文章列表、文章详情、搜索页、提示页
+// 所有用户输入通过 escapeHtml 转义，Markdown 通过 DOMPurify 消毒
+
 const { marked } = require('marked');
 const DOMPurify = require('isomorphic-dompurify');
 
+// GFM（表格、任务列表等）+ 换行转 <br>
 marked.setOptions({ gfm: true, breaks: true });
 
+// HTML 实体转义：防止 XSS（用于非 Markdown 的用户输入，如标题、摘要）
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, ch => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[ch]));
 }
 
+// 格式化日期：ISO 格式 → YYYY-MM-DD HH:mm
 function formatDate(s) {
   if (!s) return '';
   return String(s).replace('T', ' ').slice(0, 16);
 }
 
+// 共享 <head> 内容：CSS 变量、页面专属样式
 const SHARED_HEAD = `
   <link rel="stylesheet" href="/site/site.css" />
   <style>
@@ -158,7 +166,8 @@ const SHARED_HEAD = `
   </style>
 `;
 
-// 共享的浮动 UI：左上菜单、右上登录（公开页不带登录）、左下播放器
+// 共享的浮动 UI 组件：导航菜单、登录按钮、音乐播放器
+// 公开页面显示登录按钮（withLogin），后台页面不显示
 function renderFloatingUI({ withLogin = false } = {}) {
   return `
   <!-- 左上菜单 -->
@@ -197,6 +206,7 @@ function renderFloatingUI({ withLogin = false } = {}) {
   `;
 }
 
+// 搜索按钮（浮动在页面右下角）
 function renderSearchButton() {
   return `
   <a href="/search/" class="search-btn" aria-label="搜索文章">
@@ -204,6 +214,7 @@ function renderSearchButton() {
   </a>`;
 }
 
+// 渲染文章列表页：卡片式布局，带入场动画
 function renderListPage(posts) {
   const cards = posts.length === 0
     ? `<div class="empty">还没有发布的文章。</div>`
@@ -237,6 +248,7 @@ function renderListPage(posts) {
 </html>`;
 }
 
+// 渲染文章详情页：标题、日期、摘要、Markdown 正文
 function renderPostPage(post) {
   const html = DOMPurify.sanitize(marked.parse(post.content_md || ''), { USE_PROFILES: { html: true } });
   return `<!DOCTYPE html>
@@ -264,6 +276,8 @@ function renderPostPage(post) {
 </html>`;
 }
 
+// 渲染搜索页：搜索框 + 结果列表
+// 带查询词时禁用入场动画（class="searched"），结果直接显示
 function renderSearchPage(q, posts) {
   const query = String(q || '');
   let body;
@@ -351,7 +365,7 @@ function renderSearchPage(q, posts) {
 </html>`;
 }
 
-// 提示页（限流等）：复用 site.css，背景与蒙版跟主页保持一致
+// 渲染提示页（限流、错误等）：居中显示标题和消息
 function renderNoticePage({ title, heading, message, link = '/posts/', linkText = '← 所有文章' }) {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
