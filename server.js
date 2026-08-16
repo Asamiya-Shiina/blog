@@ -207,22 +207,51 @@ app.use((_req, res) => {
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>404</title>
+<link rel="stylesheet" href="/site/site.css" />
 <style>
-  html,body{margin:0;padding:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-    color:#1a1a1a;background:url('/image/IMG_20250703_100031.jpeg') center/cover no-repeat fixed}
-  body::before{content:'';position:fixed;inset:0;background:rgba(255,255,255,0.5);backdrop-filter:blur(8px);z-index:-1}
-  .box{text-align:center;padding:32px}
-  h1{font-family:Georgia,serif;font-weight:400;font-size:2.5rem;margin:0 0 12px}
-  p{color:#6b6b6b;margin:0 0 24px;font-size:1.1rem}
-  a{color:#3b82f6;text-decoration:none;border-bottom:1px solid rgba(59,130,246,0.3)}
-  a:hover{border-bottom-color:#3b82f6}
-</style></head>
-<body><div class="box">
-  <h1>Oops!</h1>
-  <p>该页面不存在</p>
-  <a href="/">← 回到首页</a>
-</div></body></html>`);
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+  .not-found {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    padding: 0 20px;
+  }
+  .not-found h1 {
+    font-family: Georgia, "Times New Roman", "Songti SC", serif;
+    font-weight: 400;
+    font-size: 56px;
+    line-height: 1.2;
+    margin: 0 0 24px;
+  }
+  .not-found p {
+    color: var(--muted);
+    font-size: 18px;
+    margin: 0 0 32px;
+  }
+  .not-found a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+  }
+  .not-found a:hover { border-bottom-color: var(--accent); }
+  @media (max-width: 560px) {
+    .not-found h1 { font-size: 42px; }
+  }
+</style>
+</head>
+<body>
+  <div class="not-found">
+    <h1>Oops! 该页面不存在</h1>
+    <p>Not Found: 404...</p>
+    <a href="/">← 回到首页</a>
+  </div>
+</body></html>`);
 });
 
 // 全局错误处理
