@@ -46,8 +46,9 @@ db.exec(`
 `);
 
 // 迁移：users 表添加 hash_version 列
+// 1 = bcrypt(明文)，2 = bcrypt(sha256(明文))
 try {
-  db.exec(`ALTER TABLE users ADD COLUMN hash_version INTEGER NOT NULL DEFAULT 2`);
+  db.exec(`ALTER TABLE users ADD COLUMN hash_version INTEGER NOT NULL DEFAULT 1`);
 } catch (_) { /* 列已存在则忽略 */ }
 
 // 初始化默认状态配置

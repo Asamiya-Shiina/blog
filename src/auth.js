@@ -105,28 +105,42 @@ function updatePassword(id, newPassword) {
 
 // 验证密码，自动处理 v1(旧) 和 v2(新) 两种 hash 格式
 // 前端发送 { password: 明文, password_hash: sha256(明文) } 两个字段
-// v2 用户直接比对 password_hash；v1 用户用 password 比对后自动迁移
+// 不依赖数据库中的 hash_version，而是自动检测并迁移
 // 返回 { ok, user? }
 function verifyPassword({ password, password_hash }, user) {
   if (!user) return { ok: false };
 
-  if (user.hash_version === 2) {
-    // 新格式：比对 sha256(明文) 与 bcrypt(sha256(明文))
-    if (!password_hash) return { ok: false };
+  // 优先尝试 v2：比对 sha256(明文) 与 bcrypt(sha256(明文))
+  if (password_hash && user.hash_version === 2) {
     const ok = bcrypt.compareSync(password_hash, user.password_hash);
-    return ok ? { ok: true, user } : { ok: false };
+    if (ok) return { ok: true, user };
+    // v2 标记但比对失败，可能是 hash_version 被误标，继续尝试 v1
   }
 
-  // v1 旧格式：比对明文与 bcrypt(明文)
-  const ok = bcrypt.compareSync(password, user.password_hash);
-  if (!ok) return { ok: false };
+  // 尝试 v1：比对明文与 bcrypt(明文)
+  if (password) {
+    const ok = bcrypt.compareSync(password, user.password_hash);
+    if (ok) {
+      // 自动迁移到 v2
+      if (password_hash) {
+        const newHash = bcrypt.hashSync(password_hash, BCRYPT_COST);
+        db.prepare('UPDATE users SET password_hash = ?, hash_version = 2 WHERE id = ?').run(newHash, user.id);
+      }
+      return { ok: true, user };
+    }
+  }
 
-  // 自动迁移到 v2：重新存储为 bcrypt(sha256(明文))
+  // v2 比对（hash_version 不是 2 但提供了 password_hash 的情况）
   if (password_hash) {
-    const newHash = bcrypt.hashSync(password_hash, BCRYPT_COST);
-    db.prepare('UPDATE users SET password_hash = ?, hash_version = 2 WHERE id = ?').run(newHash, user.id);
+    const ok = bcrypt.compareSync(password_hash, user.password_hash);
+    if (ok) {
+      // 标记为 v2
+      db.prepare('UPDATE users SET hash_version = 2 WHERE id = ?').run(user.id);
+      return { ok: true, user };
+    }
   }
-  return { ok: true, user };
+
+  return { ok: false };
 }
 
 // —— 中间件 ——
