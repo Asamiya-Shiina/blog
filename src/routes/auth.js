@@ -57,9 +57,9 @@ const userCreateSchema = z.object({
 const passwordChangeSchema = z.object({
   old_password: z.string().min(1).max(256).optional(),
   old_password_hash: z.string().min(1).max(256).optional(),
-  new_password: passwordSchema,
+  new_password: passwordSchema.optional(),
   new_password_hash: z.string().min(1).max(256).optional(),
-});
+}).refine(d => d.new_password || d.new_password_hash, { message: 'new password required' });
 
 // 与 bcrypt cost=12 同长度的不匹配 hash，登录找不到用户时用于恒定时间比对
 const PLACEHOLDER_HASH = '$2b$12$..............................................................................';
@@ -88,9 +88,10 @@ router.post('/setup', setupLimiter, (req, res) => {
 router.post('/login', loginLimiter, (req, res) => {
   const parsed = z.object({
     username: z.string().min(1).max(64),
-    password: z.string().min(1).max(256),
+    password: z.string().min(1).max(256).optional(),
     password_hash: z.string().min(1).max(256).optional(),
-  }).safeParse(req.body);
+  }).refine(d => d.password || d.password_hash, { message: 'password required' })
+    .safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid request' });
   }
