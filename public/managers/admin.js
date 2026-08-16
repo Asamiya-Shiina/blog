@@ -53,13 +53,7 @@
     }[ch]));
   }
 
-  async function hashPassword(password) {
-    const data = new TextEncoder().encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-  }
-
-  window.admin = { api, guard, logout, bindNav, escapeHtml, hashPassword };
+  window.admin = { api, guard, logout, bindNav, escapeHtml };
 
   document.addEventListener('DOMContentLoaded', async () => {
     const user = await guard();

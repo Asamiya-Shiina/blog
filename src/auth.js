@@ -18,10 +18,6 @@ const MAX_AGE_SECONDS = 30 * 24 * 60 * 60; // 30 天
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
 const BCRYPT_COST = 12;
 
-function sha256(input) {
-  return crypto.createHash('sha256').update(input).digest('hex');
-}
-
 function sign(userId, expiresAt) {
   const payload = `${userId}.${expiresAt}`;
   const mac = crypto.createHmac('sha256', SECRET).update(payload).digest('hex');
@@ -76,18 +72,18 @@ function getUserById(id) {
 
 function getUserByUsername(username) {
   if (!username) return null;
-  return db.prepare('SELECT id, username, role, created_at, password_hash, hash_version FROM users WHERE username = ?').get(username) || null;
+  return db.prepare('SELECT id, username, role, created_at, password_hash FROM users WHERE username = ?').get(username) || null;
 }
 
 function listUsers() {
   return db.prepare('SELECT id, username, role, created_at FROM users ORDER BY id ASC').all();
 }
 
-function createUser({ username, password, preHashed }) {
-  const hash = bcrypt.hashSync(preHashed ? password : sha256(password), BCRYPT_COST);
+function createUser({ username, password }) {
+  const hash = bcrypt.hashSync(password, BCRYPT_COST);
   const info = db.prepare(`
-    INSERT INTO users (username, password_hash, role, hash_version)
-    VALUES (?, ?, 'admin', 2)
+    INSERT INTO users (username, password_hash, role)
+    VALUES (?, ?, 'admin')
   `).run(username, hash);
   return getUserById(info.lastInsertRowid);
 }
@@ -98,35 +94,9 @@ function deleteUser(id) {
 }
 
 function updatePassword(id, newPassword) {
-  const hash = bcrypt.hashSync(sha256(newPassword), BCRYPT_COST);
-  const info = db.prepare('UPDATE users SET password_hash = ?, hash_version = 2 WHERE id = ?').run(hash, id);
+  const hash = bcrypt.hashSync(newPassword, BCRYPT_COST);
+  const info = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, id);
   return info.changes > 0;
-}
-
-// 验证密码，自动处理 v1(旧) 和 v2(新) 两种 hash 格式
-// 前端发送 { password: 明文, password_hash: sha256(明文) } 两个字段
-// v2 用户直接比对 password_hash；v1 用户用 password 比对后自动迁移
-// 返回 { ok, user? }
-function verifyPassword({ password, password_hash }, user) {
-  if (!user) return { ok: false };
-
-  if (user.hash_version === 2) {
-    // 新格式：比对 sha256(明文) 与 bcrypt(sha256(明文))
-    if (!password_hash) return { ok: false };
-    const ok = bcrypt.compareSync(password_hash, user.password_hash);
-    return ok ? { ok: true, user } : { ok: false };
-  }
-
-  // v1 旧格式：比对明文与 bcrypt(明文)
-  const ok = bcrypt.compareSync(password, user.password_hash);
-  if (!ok) return { ok: false };
-
-  // 自动迁移到 v2：重新存储为 bcrypt(sha256(明文))
-  if (password_hash) {
-    const newHash = bcrypt.hashSync(password_hash, BCRYPT_COST);
-    db.prepare('UPDATE users SET password_hash = ?, hash_version = 2 WHERE id = ?').run(newHash, user.id);
-  }
-  return { ok: true, user };
 }
 
 // —— 中间件 ——
@@ -160,7 +130,5 @@ module.exports = {
   createUser,
   deleteUser,
   updatePassword,
-  verifyPassword,
-  sha256,
   BCRYPT_COST,
 };

@@ -49,11 +49,7 @@ app.use(setupGuard);
 // 静态资源（带扩展名的 CSS/JS/图片）放行（不带敏感内容）
 function requireAdminPage(req, res, next) {
   const token = req.cookies && req.cookies[COOKIE_NAME];
-  const session = verify(token);
-  if (session) {
-    const user = db.prepare('SELECT role FROM users WHERE id = ?').get(session.userId);
-    if (user && user.role === 'admin') return next();
-  }
+  if (verify(token)) return next();
   // 仅放行明确的静态资源扩展名，避免 /managers/secret.txt 等绕过认证
   if (/\.(?:css|js|png|jpe?g|gif|svg|ico|woff2?|ttf|eot|map)$/i.test(req.path)) return next();
   return res.redirect('/login/');

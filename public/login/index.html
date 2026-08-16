@@ -189,12 +189,6 @@
 
   <script>
     (() => {
-      async function sha256(password) {
-        const data = new TextEncoder().encode(password);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-      }
-
       const form = document.getElementById('login-form');
       const err  = document.getElementById('error');
       const btn  = document.getElementById('submit');
@@ -221,11 +215,10 @@
           btn.disabled = true;
           btn.textContent = '登录中…';
           try {
-            const password_hash = await sha256(password);
             const res = await fetch('/api/login', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ username, password, password_hash }),
+              body: JSON.stringify({ username, password }),
             });
             if (res.status === 204) {
               window.location.href = '/managers/';
@@ -287,11 +280,10 @@
           btn.disabled = true;
           btn.textContent = '创建中…';
           try {
-            const password_hash = await sha256(password);
             const res = await fetch('/api/setup', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ username, password, password_hash }),
+              body: JSON.stringify({ username, password }),
             });
             if (res.status === 201) {
               window.location.href = '/managers/';

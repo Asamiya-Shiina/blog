@@ -4,5 +4,3 @@ data
 .git
 .github
 *.log
-client/
-content/
