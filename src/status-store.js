@@ -72,4 +72,7 @@ function addClient(res) {
 // 定时清理过期设备
 setInterval(cleanStaleDevices, 30_000);
 
-module.exports = { updateStatus, clearStatus, clearAllStatus, getPublicStatus, addClient };
+module.exports = {
+  updateStatus, clearStatus, clearAllStatus, getPublicStatus, addClient,
+  get clientCount() { return sseClients.size; },
+};

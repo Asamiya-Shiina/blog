@@ -5,5 +5,16 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    environment:
+      - COOKIE_SECURE=false
     volumes:
       - ./data:/app/data
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+    pids_limit: 100
+    read_only: true
+    tmpfs:
+      - /tmp

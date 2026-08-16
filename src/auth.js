@@ -12,10 +12,14 @@ if (SECRET === 'change-me-to-a-random-string') {
   console.error('SESSION_SECRET is still the default placeholder — set a real secret in .env');
   process.exit(1);
 }
+if (SECRET.length < 32) {
+  console.error('SESSION_SECRET is too short (minimum 32 characters)');
+  process.exit(1);
+}
 
 const COOKIE_NAME = 'sid';
 const MAX_AGE_SECONDS = 30 * 24 * 60 * 60; // 30 天
-const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
+const COOKIE_SECURE = process.env.COOKIE_SECURE !== 'false';
 const BCRYPT_COST = 12;
 
 function sha256(input) {

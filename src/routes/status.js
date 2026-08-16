@@ -3,7 +3,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { z } = require('zod');
-const { requireAuth } = require('../auth');
+const { requireAuth, requireAdmin } = require('../auth');
 const db = require('../db');
 const store = require('../status-store');
 
@@ -69,9 +69,16 @@ router.post('/', requireAuth, statusLimiter, (req, res) => {
 });
 
 // POST /api/data/off - 手动关闭
-router.post('/off', requireAuth, (req, res) => {
-  const deviceName = req.body.deviceName || 'default';
-  const deviceId = `${req.user.username}_${deviceName}`;
+const offSchema = z.object({
+  deviceName: z.string().max(50).optional().default('default'),
+});
+
+router.post('/off', requireAuth, statusLimiter, (req, res) => {
+  const parsed = offSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid request' });
+  }
+  const deviceId = `${req.user.username}_${parsed.data.deviceName}`;
   store.clearStatus(deviceId);
   res.json({ ok: true });
 });
@@ -88,8 +95,13 @@ router.get('/', (_req, res) => {
   res.json(store.getPublicStatus());
 });
 
-// GET /api/data/stream - SSE 推送
+// GET /api/data/stream - SSE 推送（限制并发连接数防资源耗尽）
+const MAX_SSE_CLIENTS = 50;
+
 router.get('/stream', (req, res) => {
+  if (store.clientCount >= MAX_SSE_CLIENTS) {
+    return res.status(429).json({ error: 'too many connections' });
+  }
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -105,7 +117,7 @@ router.get('/stream', (req, res) => {
 // ============ 管理 API（需要登录） ============
 
 // GET /api/data/admin/config - 获取配置
-router.get('/admin/config', requireAuth, (req, res) => {
+router.get('/admin/config', requireAuth, requireAdmin, (req, res) => {
   res.json(getAllConfig());
 });
 
@@ -119,7 +131,7 @@ const configSchema = z.object({
   titleAppPatterns: z.array(z.object({ pattern: z.string().max(200) })).optional(),
 });
 
-router.post('/admin/config', requireAuth, (req, res) => {
+router.post('/admin/config', requireAuth, requireAdmin, (req, res) => {
   const parsed = configSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid config' });

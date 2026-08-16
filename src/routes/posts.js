@@ -83,7 +83,7 @@ router.get('/', requireAuth, (req, res) => {
   }
   if (q) {
     where.push('(title LIKE ? OR excerpt LIKE ? OR content_md LIKE ?)');
-    const like = '%' + q.replace(/[%_]/g, ch => '\\' + ch) + '%';
+    const like = '%' + q.replace(/[\\%_]/g, ch => '\\' + ch) + '%';
     params.push(like, like, like);
   }
   const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
@@ -132,7 +132,7 @@ router.get('/:id', requireAuth, (req, res) => {
 router.post('/', requireAuth, (req, res) => {
   const parsed = postSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: 'invalid', details: parsed.error.flatten() });
+    return res.status(400).json({ error: 'invalid' });
   }
   const { title, slug, excerpt, content_md, status } = parsed.data;
   const baseSlug = slug ? slugify(slug) : slugify(title);
@@ -156,7 +156,7 @@ router.put('/:id', requireAuth, (req, res) => {
 
   const parsed = patchSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: 'invalid', details: parsed.error.flatten() });
+    return res.status(400).json({ error: 'invalid' });
   }
   const patch = parsed.data;
 

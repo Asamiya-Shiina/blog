@@ -122,6 +122,12 @@
   </div>
 
   <script>
+    async function sha256(password) {
+      const data = new TextEncoder().encode(password);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
     const form = document.getElementById('form');
     const btn  = document.getElementById('btn');
     const err  = document.getElementById('error');
@@ -141,10 +147,11 @@
 
       btn.disabled = true;
       try {
+        const password_hash = await sha256(password);
         const res = await fetch('/api/setup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ username, password_hash }),
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));

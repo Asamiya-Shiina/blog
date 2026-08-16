@@ -31,7 +31,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
 // 反向代理信任（部署到 Nginx/Caddy 等后面时）
-app.set('trust proxy', 1);
+app.set('trust proxy', parseInt(process.env.TRUST_PROXY || '1', 10));
 
 // 安全响应头
 app.use((_req, res, next) => {
@@ -39,6 +39,8 @@ app.use((_req, res, next) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'");
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   next();
 });
 
@@ -135,6 +137,8 @@ function repeatSearchGuard(req, res, next) {
     for (const [ip, entry] of lastSearch) {
       if (now - entry.at > SEARCH_WINDOW_MS) lastSearch.delete(ip);
     }
+    // 强制清理：超过 1000 条时全部清空，防止内存泄漏
+    if (lastSearch.size > 1000) lastSearch.clear();
   }
 
   const prev = lastSearch.get(req.ip);
@@ -257,7 +261,11 @@ app.use((_req, res) => {
 // 全局错误处理
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
-  console.error(err);
+  if (process.env.NODE_ENV !== 'production') {
+    console.error(err);
+  } else {
+    console.error(err.message || err);
+  }
   res.status(err.status || 500).json({ error: 'internal error' });
 });
 
