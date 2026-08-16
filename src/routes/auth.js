@@ -16,6 +16,9 @@ const {
   createUser,
   deleteUser,
   updatePassword,
+  verifyPassword,
+  sha256,
+  BCRYPT_COST,
 } = require('../auth');
 
 const router = express.Router();
@@ -48,11 +51,14 @@ const usernameSchema = z.string().min(1).max(64).regex(/^[a-zA-Z0-9_-]+$/, 'inva
 const passwordSchema = z.string().min(8).max(256);
 const userCreateSchema = z.object({
   username: usernameSchema,
-  password: passwordSchema,
-});
+  password: passwordSchema.optional(),
+  password_hash: z.string().min(1).max(256).optional(),
+}).refine(d => d.password || d.password_hash, { message: 'password required' });
 const passwordChangeSchema = z.object({
   old_password: z.string().min(1).max(256).optional(),
+  old_password_hash: z.string().min(1).max(256).optional(),
   new_password: passwordSchema,
+  new_password_hash: z.string().min(1).max(256).optional(),
 });
 
 // 与 bcrypt cost=12 同长度的不匹配 hash，登录找不到用户时用于恒定时间比对
@@ -71,7 +77,9 @@ router.post('/setup', setupLimiter, (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid request' });
   }
-  const user = createUser(parsed.data);
+  const pw = parsed.data.password_hash || parsed.data.password;
+  const preHashed = !!parsed.data.password_hash;
+  const user = createUser({ username: parsed.data.username, password: pw, preHashed });
   setSessionCookie(res, user.id);
   res.status(201).json({ id: user.id, username: user.username, role: user.role });
 });
@@ -81,18 +89,23 @@ router.post('/login', loginLimiter, (req, res) => {
   const parsed = z.object({
     username: z.string().min(1).max(64),
     password: z.string().min(1).max(256),
+    password_hash: z.string().min(1).max(256).optional(),
   }).safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid request' });
   }
-  const { username, password } = parsed.data;
+  const { username, password, password_hash } = parsed.data;
+
+  const user = getUserByUsername(username);
 
   // 用户不存在时也走一次 bcrypt，保持响应耗时恒定，避免用户名枚举
-  const user = getUserByUsername(username);
-  const hashToCheck = user ? user.password_hash : PLACEHOLDER_HASH;
-  const passOk = bcrypt.compareSync(password, hashToCheck);
+  if (!user) {
+    bcrypt.compareSync(password_hash || password, PLACEHOLDER_HASH);
+    return res.status(401).json({ error: 'invalid credentials' });
+  }
 
-  if (!user || !passOk) {
+  const result = verifyPassword({ password, password_hash }, user);
+  if (!result.ok) {
     return res.status(401).json({ error: 'invalid credentials' });
   }
 
@@ -120,7 +133,9 @@ router.post('/users', requireAuth, requireAdmin, writeLimiter, (req, res) => {
     return res.status(400).json({ error: 'invalid request' });
   }
   try {
-    const user = createUser(parsed.data);
+    const pw = parsed.data.password_hash || parsed.data.password;
+    const preHashed = !!parsed.data.password_hash;
+    const user = createUser({ username: parsed.data.username, password: pw, preHashed });
     res.status(201).json({ id: user.id, username: user.username, role: user.role });
   } catch (err) {
     if (err && err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
@@ -154,13 +169,18 @@ router.patch('/users/:id/password', requireAuth, writeLimiter, (req, res) => {
   // 自己改自己时必须验证旧密码；管理员改别人时不需要
   if (id === req.user.id) {
     const user = getUserByUsername(req.user.username);
-    if (!user || !bcrypt.compareSync(parsed.data.old_password, user.password_hash)) {
-      return res.status(403).json({ error: 'incorrect password' });
-    }
+    if (!user) return res.status(403).json({ error: 'incorrect password' });
+    const result = verifyPassword({
+      password: parsed.data.old_password,
+      password_hash: parsed.data.old_password_hash,
+    }, user);
+    if (!result.ok) return res.status(403).json({ error: 'incorrect password' });
   }
-  if (!updatePassword(id, parsed.data.new_password)) {
-    return res.status(404).json({ error: 'not found' });
-  }
+  // 优先使用 new_password_hash（前端已 sha256），否则用 new_password（明文）
+  const newPw = parsed.data.new_password_hash || parsed.data.new_password;
+  const hash = bcrypt.hashSync(sha256(newPw), BCRYPT_COST);
+  const info = db.prepare('UPDATE users SET password_hash = ?, hash_version = 2 WHERE id = ?').run(hash, id);
+  if (info.changes === 0) return res.status(404).json({ error: 'not found' });
   res.status(204).end();
 });
 
