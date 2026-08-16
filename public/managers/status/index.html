@@ -40,7 +40,7 @@
         <div id="blacklist-list"></div>
         <div class="toolbar" style="margin-top: 12px;">
           <input type="text" id="blacklist-input" placeholder="输入进程名，如 chrome" />
-          <button class="btn btn-primary" onclick="addBlacklist()">添加</button>
+          <button class="btn btn-primary" type="button">添加</button>
         </div>
       </div>
 
@@ -51,7 +51,7 @@
         <div id="patterns-list"></div>
         <div class="toolbar" style="margin-top: 12px;">
           <input type="text" id="pattern-input" placeholder="输入正则，如 .*密码.*" />
-          <button class="btn btn-primary" onclick="addPattern()">添加</button>
+          <button class="btn btn-primary" type="button">添加</button>
         </div>
       </div>
 
@@ -63,7 +63,7 @@
         <div class="toolbar" style="margin-top: 12px;">
           <input type="text" id="mapping-key" placeholder="进程名" style="width: 140px;" />
           <input type="text" id="mapping-value" placeholder="显示名" style="width: 140px;" />
-          <button class="btn btn-primary" onclick="addMapping()">添加</button>
+          <button class="btn btn-primary" type="button">添加</button>
         </div>
       </div>
 
@@ -75,7 +75,7 @@
         <div class="toolbar" style="margin-top: 12px;">
           <input type="text" id="app-pattern-regex" placeholder="正则，如 ^python" style="width: 160px;" />
           <input type="text" id="app-pattern-name" placeholder="显示名" style="width: 140px;" />
-          <button class="btn btn-primary" onclick="addAppPattern()">添加</button>
+          <button class="btn btn-primary" type="button">添加</button>
         </div>
       </div>
 
@@ -86,7 +86,7 @@
         <div id="title-apps-list"></div>
         <div class="toolbar" style="margin-top: 12px;">
           <input type="text" id="title-app-input" placeholder="输入进程名" />
-          <button class="btn btn-primary" onclick="addTitleApp()">添加</button>
+          <button class="btn btn-primary" type="button">添加</button>
         </div>
       </div>
 
@@ -97,7 +97,7 @@
         <div id="title-app-patterns-list"></div>
         <div class="toolbar" style="margin-top: 12px;">
           <input type="text" id="title-app-pattern-input" placeholder="正则，如 ^python" />
-          <button class="btn btn-primary" onclick="addTitleAppPattern()">添加</button>
+          <button class="btn btn-primary" type="button">添加</button>
         </div>
       </div>
     </main>
@@ -122,16 +122,19 @@
 
       async function loadStatus() {
         try {
-          const status = await api('GET', '/api/data');
+          const data = await api('GET', '/api/data');
           const el = document.getElementById('current-status');
-          if (status.active) {
-            el.innerHTML = `
-              <p><strong>在线</strong> - ${escapeHtml(status.app)}</p>
-              ${status.title ? '<p>' + escapeHtml(status.title) + '</p>' : ''}
-              <p class="help">最后更新: ${new Date(status.updatedAt).toLocaleString()}</p>
-            `;
-          } else {
+          const devices = data && data.devices ? data.devices : [];
+          if (devices.length === 0) {
             el.innerHTML = '<p><em>离线</em></p>';
+          } else {
+            el.innerHTML = devices.map(d => `
+              <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--line)">
+                <p><strong>在线</strong> - ${escapeHtml(d.app)}</p>
+                ${d.title ? '<p>' + escapeHtml(d.title) + '</p>' : ''}
+                <p class="help">设备: ${escapeHtml(d.id)} · 最后更新: ${new Date(d.updatedAt).toLocaleString()}</p>
+              </div>
+            `).join('');
           }
         } catch (e) {
           console.error(e);
@@ -160,42 +163,70 @@
         // 黑名单
         const bl = document.getElementById('blacklist-list');
         bl.innerHTML = (config.blacklist || []).map(item => `
-          <span class="tag">${escapeHtml(item)} <span class="tag-remove" onclick="removeBlacklist('${escapeHtml(item)}')">×</span></span>
+          <span class="tag">${escapeHtml(item)} <span class="tag-remove" data-action="removeBlacklist" data-value="${escapeHtml(item)}">×</span></span>
         `).join('') || '<span class="help">暂无</span>';
 
         // 黑名单模式
         const patterns = document.getElementById('patterns-list');
         patterns.innerHTML = (config.blacklistPatterns || []).map(item => `
-          <span class="tag"><code>${escapeHtml(item)}</code> <span class="tag-remove" onclick="removePattern('${escapeHtml(item)}')">×</span></span>
+          <span class="tag"><code>${escapeHtml(item)}</code> <span class="tag-remove" data-action="removePattern" data-value="${escapeHtml(item)}">×</span></span>
         `).join('') || '<span class="help">暂无</span>';
 
         // 应用名映射
         const mappings = document.getElementById('mapping-list');
         mappings.innerHTML = Object.entries(config.appNames || {}).map(([k, v]) => `
-          <span class="tag">${escapeHtml(k)} → ${escapeHtml(v)} <span class="tag-remove" onclick="removeMapping('${escapeHtml(k)}')">×</span></span>
+          <span class="tag">${escapeHtml(k)} → ${escapeHtml(v)} <span class="tag-remove" data-action="removeMapping" data-key="${escapeHtml(k)}">×</span></span>
         `).join('') || '<span class="help">暂无</span>';
 
         // 应用名模式
         const appPatterns = document.getElementById('app-patterns-list');
         appPatterns.innerHTML = (config.appNamePatterns || []).map((item, i) => `
-          <span class="tag"><code>${escapeHtml(item.pattern)}</code> → ${escapeHtml(item.name)} <span class="tag-remove" onclick="removeAppPattern(${i})">×</span></span>
+          <span class="tag"><code>${escapeHtml(item.pattern)}</code> → ${escapeHtml(item.name)} <span class="tag-remove" data-action="removeAppPattern" data-index="${i}">×</span></span>
         `).join('') || '<span class="help">暂无</span>';
 
         // 标题应用
         const titleApps = document.getElementById('title-apps-list');
         titleApps.innerHTML = (config.titleApps || []).map(item => `
-          <span class="tag">${escapeHtml(item)} <span class="tag-remove" onclick="removeTitleApp('${escapeHtml(item)}')">×</span></span>
+          <span class="tag">${escapeHtml(item)} <span class="tag-remove" data-action="removeTitleApp" data-value="${escapeHtml(item)}">×</span></span>
         `).join('') || '<span class="help">暂无</span>';
 
         // 标题应用模式
         const titleAppPatterns = document.getElementById('title-app-patterns-list');
         titleAppPatterns.innerHTML = (config.titleAppPatterns || []).map((item, i) => `
-          <span class="tag"><code>${escapeHtml(item.pattern)}</code> <span class="tag-remove" onclick="removeTitleAppPattern(${i})">×</span></span>
+          <span class="tag"><code>${escapeHtml(item.pattern)}</code> <span class="tag-remove" data-action="removeTitleAppPattern" data-index="${i}">×</span></span>
         `).join('') || '<span class="help">暂无</span>';
       }
 
-      // 黑名单操作
-      window.addBlacklist = async () => {
+      // —— 事件委托：统一处理所有 tag-remove 点击 ——
+      document.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.tag-remove');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        if (action === 'removeBlacklist') {
+          config.blacklist = (config.blacklist || []).filter(b => b !== btn.dataset.value);
+          await saveConfig();
+        } else if (action === 'removePattern') {
+          config.blacklistPatterns = (config.blacklistPatterns || []).filter(p => p !== btn.dataset.value);
+          await saveConfig();
+        } else if (action === 'removeMapping') {
+          delete config.appNames[btn.dataset.key];
+          await saveConfig();
+        } else if (action === 'removeAppPattern') {
+          const idx = parseInt(btn.dataset.index, 10);
+          config.appNamePatterns = (config.appNamePatterns || []).filter((_, i) => i !== idx);
+          await saveConfig();
+        } else if (action === 'removeTitleApp') {
+          config.titleApps = (config.titleApps || []).filter(p => p !== btn.dataset.value);
+          await saveConfig();
+        } else if (action === 'removeTitleAppPattern') {
+          const idx = parseInt(btn.dataset.index, 10);
+          config.titleAppPatterns = (config.titleAppPatterns || []).filter((_, i) => i !== idx);
+          await saveConfig();
+        }
+      });
+
+      // —— 添加操作 ——
+      document.getElementById('blacklist-input').closest('.toolbar').querySelector('button').addEventListener('click', async () => {
         const input = document.getElementById('blacklist-input');
         const item = input.value.trim();
         if (!item) return;
@@ -205,15 +236,9 @@
           await saveConfig();
         }
         input.value = '';
-      };
+      });
 
-      window.removeBlacklist = async (item) => {
-        config.blacklist = (config.blacklist || []).filter(b => b !== item);
-        await saveConfig();
-      };
-
-      // 黑名单模式操作
-      window.addPattern = async () => {
+      document.getElementById('pattern-input').closest('.toolbar').querySelector('button').addEventListener('click', async () => {
         const input = document.getElementById('pattern-input');
         const item = input.value.trim();
         if (!item) return;
@@ -223,15 +248,9 @@
           await saveConfig();
         }
         input.value = '';
-      };
+      });
 
-      window.removePattern = async (item) => {
-        config.blacklistPatterns = (config.blacklistPatterns || []).filter(p => p !== item);
-        await saveConfig();
-      };
-
-      // 应用名映射操作
-      window.addMapping = async () => {
+      document.getElementById('mapping-key').closest('.toolbar').querySelector('button').addEventListener('click', async () => {
         const key = document.getElementById('mapping-key').value.trim();
         const value = document.getElementById('mapping-value').value.trim();
         if (!key || !value) return;
@@ -240,15 +259,9 @@
         await saveConfig();
         document.getElementById('mapping-key').value = '';
         document.getElementById('mapping-value').value = '';
-      };
+      });
 
-      window.removeMapping = async (key) => {
-        delete config.appNames[key];
-        await saveConfig();
-      };
-
-      // 应用名模式操作
-      window.addAppPattern = async () => {
+      document.getElementById('app-pattern-regex').closest('.toolbar').querySelector('button').addEventListener('click', async () => {
         const regex = document.getElementById('app-pattern-regex').value.trim();
         const name = document.getElementById('app-pattern-name').value.trim();
         if (!regex || !name) return;
@@ -258,15 +271,9 @@
         await saveConfig();
         document.getElementById('app-pattern-regex').value = '';
         document.getElementById('app-pattern-name').value = '';
-      };
+      });
 
-      window.removeAppPattern = async (index) => {
-        config.appNamePatterns = (config.appNamePatterns || []).filter((_, i) => i !== index);
-        await saveConfig();
-      };
-
-      // 标题应用操作
-      window.addTitleApp = async () => {
+      document.getElementById('title-app-input').closest('.toolbar').querySelector('button').addEventListener('click', async () => {
         const input = document.getElementById('title-app-input');
         const item = input.value.trim();
         if (!item) return;
@@ -276,15 +283,9 @@
           await saveConfig();
         }
         input.value = '';
-      };
+      });
 
-      window.removeTitleApp = async (item) => {
-        config.titleApps = (config.titleApps || []).filter(p => p !== item);
-        await saveConfig();
-      };
-
-      // 标题应用模式操作
-      window.addTitleAppPattern = async () => {
+      document.getElementById('title-app-pattern-input').closest('.toolbar').querySelector('button').addEventListener('click', async () => {
         const input = document.getElementById('title-app-pattern-input');
         const regex = input.value.trim();
         if (!regex) return;
@@ -293,12 +294,7 @@
         config.titleAppPatterns.push({ pattern: regex });
         await saveConfig();
         input.value = '';
-      };
-
-      window.removeTitleAppPattern = async (index) => {
-        config.titleAppPatterns = (config.titleAppPatterns || []).filter((_, i) => i !== index);
-        await saveConfig();
-      };
+      });
 
       // 初始加载
       await Promise.all([loadStatus(), loadConfig()]);

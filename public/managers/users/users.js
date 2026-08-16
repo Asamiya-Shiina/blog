@@ -1,7 +1,7 @@
 'use strict';
 
 (() => {
-  const { api, guard, escapeHtml, bindNav } = window.admin;
+  const { api, guard, escapeHtml, bindNav, hashPassword } = window.admin;
 
   const setupView = document.getElementById('setup-view');
   const manageView = document.getElementById('manage-view');
@@ -105,12 +105,17 @@
         const np = prompt('请输入新密码（至少 8 位）');
         if (!np) return;
         if (np.length < 8) { alert('密码至少 8 位'); return; }
-        body = { old_password: op, new_password: np };
+        body = {
+          old_password: op,
+          old_password_hash: await hashPassword(op),
+          new_password: np,
+          new_password_hash: await hashPassword(np),
+        };
       } else {
         const np = prompt(`为「${name}」输入新密码（至少 8 位）`);
         if (!np) return;
         if (np.length < 8) { alert('密码至少 8 位'); return; }
-        body = { new_password: np };
+        body = { new_password: np, new_password_hash: await hashPassword(np) };
       }
       try {
         await api('PATCH', '/api/users/' + id + '/password', body);
@@ -138,9 +143,12 @@
     const form = e.currentTarget;
     const fd = new FormData(form);
     try {
+      const pw = fd.get('password');
+      const password_hash = await hashPassword(pw);
       await api('POST', '/api/users', {
         username: fd.get('username'),
-        password: fd.get('password'),
+        password: pw,
+        password_hash,
       });
       form.reset();
       createCard.hidden = true;
