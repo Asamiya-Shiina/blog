@@ -201,7 +201,29 @@ app.use('/image', express.static(path.join(__dirname, 'image')));
 app.use('/audio', express.static(path.join(__dirname, 'audio')));
 
 // 兜底 404
-app.use((_req, res) => res.status(404).json({ error: 'not found' }));
+app.use((_req, res) => {
+  res.status(404).type('html').send(`<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>404</title>
+<style>
+  html,body{margin:0;padding:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    color:#1a1a1a;background:url('/image/IMG_20250703_100031.jpeg') center/cover no-repeat fixed}
+  body::before{content:'';position:fixed;inset:0;background:rgba(255,255,255,0.5);backdrop-filter:blur(8px);z-index:-1}
+  .box{text-align:center;padding:32px}
+  h1{font-family:Georgia,serif;font-weight:400;font-size:2.5rem;margin:0 0 12px}
+  p{color:#6b6b6b;margin:0 0 24px;font-size:1.1rem}
+  a{color:#3b82f6;text-decoration:none;border-bottom:1px solid rgba(59,130,246,0.3)}
+  a:hover{border-bottom-color:#3b82f6}
+</style></head>
+<body><div class="box">
+  <h1>Oops!</h1>
+  <p>该页面不存在</p>
+  <a href="/">← 回到首页</a>
+</div></body></html>`);
+});
 
 // 全局错误处理
 // eslint-disable-next-line no-unused-vars
