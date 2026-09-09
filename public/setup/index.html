@@ -157,7 +157,7 @@
           const data = await res.json().catch(() => ({}));
           throw new Error(data.error || '请求失败');
         }
-        location.href = '/Asamiya/';
+        location.href = '/managers/';
       } catch (ex) {
         err.textContent = ex.message;
       } finally {
