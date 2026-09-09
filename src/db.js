@@ -55,6 +55,27 @@ db.exec(`
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL                                  -- JSON 字符串
   );
+
+  -- 音乐库：管理处上传的音频文件
+  CREATE TABLE IF NOT EXISTS music (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    filename      TEXT NOT NULL UNIQUE,                 -- 磁盘文件名（随机生成）
+    original_name TEXT NOT NULL,                        -- 用户上传时的原始文件名
+    title         TEXT NOT NULL,                        -- 显示标题（默认取自 original_name）
+    mime          TEXT NOT NULL,                        -- MIME 类型
+    size_bytes    INTEGER NOT NULL,                     -- 文件大小
+    created_at    TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_music_created ON music(created_at DESC);
+
+  -- 音乐设置：单行表，存当前激活的歌曲
+  -- id 固定为 1，只允许一条记录
+  CREATE TABLE IF NOT EXISTS music_settings (
+    id        INTEGER PRIMARY KEY CHECK (id = 1),
+    active_id INTEGER REFERENCES music(id) ON DELETE SET NULL
+  );
+  -- 初始化单行
+  INSERT OR IGNORE INTO music_settings (id, active_id) VALUES (1, NULL);
 `);
 
 // —— 数据库迁移 ——

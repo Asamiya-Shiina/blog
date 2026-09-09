@@ -139,9 +139,12 @@
   const btn   = document.getElementById('player-btn');
   const fill  = document.querySelector('.player-progress-fill');
   const bar   = document.querySelector('.player-progress');
+  const titleEl = document.querySelector('.player-title');
   if (audio && btn) {
     btn.addEventListener('click', () => {
-      if (audio.paused) audio.play(); else audio.pause();
+      if (!audio.src) return;  // 没有选中歌曲时不响应
+      if (audio.paused) audio.play().catch(() => {});
+      else audio.pause();
     });
     audio.addEventListener('play',  () => btn.classList.add('is-playing'));
     audio.addEventListener('pause', () => btn.classList.remove('is-playing'));
@@ -164,6 +167,48 @@
       const r = Math.floor(s % 60);
       return m + ':' + String(r).padStart(2, '0');
     }
+
+    // 加载 + 切换当前播放歌曲
+    // 返回当前活跃歌曲对象；没有则返回 null
+    async function loadActiveSong() {
+      try {
+        const res = await fetch('/api/music/active', { credentials: 'same-origin' });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.song || null;
+      } catch {
+        return null;
+      }
+    }
+
+    function applySong(song) {
+      if (!song || !song.src) {
+        audio.removeAttribute('src');
+        audio.load();
+        btn.disabled = true;
+        btn.title = '尚未选择歌曲';
+        if (titleEl) titleEl.textContent = '尚未选择歌曲';
+        return;
+      }
+      // 同一首歌不重置 src，避免打断正在播放的进度
+      const curSrc = audio.getAttribute('src');
+      if (curSrc !== song.src) {
+        audio.src = song.src;
+        audio.load();
+      }
+      btn.disabled = false;
+      btn.title = '';
+      if (titleEl) titleEl.textContent = song.title || '未命名';
+    }
+
+    // 首次加载
+    loadActiveSong().then(applySong);
+    // 标签页回到前台时重新拉一次（管理员刚换歌能立即生效）
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        loadActiveSong().then(applySong);
+      }
+    });
   }
 
   // —— 实时状态 ——

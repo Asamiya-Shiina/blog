@@ -18,6 +18,7 @@
 - Markdown 编辑器：分栏实时预览
 - 用户管理：创建账号、重置密码、删除用户
 - 状态配置：黑名单、应用名映射、标题显示规则
+- 音乐管理：上传/删除音频文件、选择当前播放歌曲（前台播放器自动同步）
 
 **安全**
 - HMAC-SHA256 Session 认证（httpOnly Cookie，30 天有效期）
@@ -102,6 +103,7 @@ npm start
 │   ├── routes/
 │   │   ├── auth.js        # 认证 API（登录、注册、用户管理）
 │   │   ├── posts.js       # 文章 API（CRUD、预览）
+│   │   ├── music.js       # 音乐 API（上传、列表、设为当前播放）
 │   │   └── status.js      # 状态 API（上报、配置、SSE 流）
 │   └── views/
 │       ├── posts.js       # 前台页面服务端渲染

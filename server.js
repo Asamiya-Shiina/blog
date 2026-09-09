@@ -4,6 +4,7 @@
 require('dotenv').config();
 
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
@@ -11,7 +12,12 @@ const rateLimit = require('express-rate-limit');
 const db = require('./src/db');
 const authRoutes = require('./src/routes/auth');
 const postsRoutes = require('./src/routes/posts');
+const musicRoutes = require('./src/routes/music');
 const { verify, COOKIE_NAME } = require('./src/auth');
+
+// 音乐上传目录：与 src/routes/music.js 保持一致
+const MUSIC_DIR = path.join(__dirname, 'data', 'uploads', 'music');
+fs.mkdirSync(MUSIC_DIR, { recursive: true });
 const { renderListPage, renderPostPage, renderSearchPage, renderNoticePage } = require('./src/views/posts');
 const { renderStatusPage } = require('./src/views/status-page');
 
@@ -81,6 +87,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 // —— API 路由挂载 ——
 app.use('/api', authRoutes);            // 登录、注册、用户管理
 app.use('/api/posts', postsRoutes);     // 文章 CRUD
+app.use('/api/music', musicRoutes);     // 音乐管理（公开的 /active + 管理接口）
 app.use('/api/data', require('./src/routes/status'));  // 实时状态上报与查询
 
 // —— 公开文章页（无需登录） ——
@@ -227,7 +234,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 // 根级资源：首页、图片、音频（显式列出，避免暴露 data/、node_modules/）
 app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.use('/image', express.static(path.join(__dirname, 'image')));
-app.use('/audio', express.static(path.join(__dirname, 'audio')));
+// 音频从 data/uploads/music 提供（与管理上传目录一致）
+app.use('/audio', express.static(MUSIC_DIR));
 
 // —— 兜底 404（所有路由未匹配时） ——
 app.use((_req, res) => {

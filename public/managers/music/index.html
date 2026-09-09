@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Asamiya · 音乐</title>
+  <link rel="stylesheet" href="/managers/admin.css" />
+  <style>
+    .upload-zone {
+      border: 2px dashed rgba(0, 0, 0, 0.15);
+      border-radius: 14px;
+      padding: 32px 24px;
+      text-align: center;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.5);
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+    .upload-zone:hover,
+    .upload-zone.is-dragover {
+      border-color: var(--accent);
+      background: rgba(59, 130, 246, 0.06);
+    }
+    .upload-zone .hint {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 8px;
+    }
+    .upload-zone strong { color: var(--fg); }
+    .upload-zone input[type=file] { display: none; }
+
+    .active-banner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      border-radius: 12px;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+    .active-banner .badge {
+      padding: 2px 10px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .active-banner .name { font-weight: 600; }
+    .active-banner .meta { color: var(--muted); font-size: 13px; }
+
+    .tag-active { background: rgba(59, 130, 246, 0.15); color: var(--accent-dark); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="topbar">
+      <a class="brand" href="/managers/">Asamiya</a>
+      <nav>
+        <a href="/managers/">概览</a>
+        <a href="/managers/posts">文章</a>
+        <a href="/managers/users">用户</a>
+        <a href="/managers/status">状态</a>
+        <a href="/managers/music" class="is-active">音乐</a>
+        <a href="/" target="_blank" rel="noopener">查看站点 ↗</a>
+      </nav>
+      <div class="spacer"></div>
+      <span class="user" id="admin-nav-user"></span>
+      <button class="logout" id="admin-logout" type="button">退出</button>
+    </header>
+
+    <main class="container">
+
+      <div id="notice" class="notice"></div>
+
+      <div id="active-banner"></div>
+
+      <!-- 上传区 -->
+      <div class="card">
+        <h2>上传歌曲</h2>
+        <label class="upload-zone" id="drop-zone">
+          <input type="file" id="file" accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave,audio/ogg,audio/flac,audio/x-flac,audio/mp4,audio/x-m4a,audio/aac,audio/x-aac,.mp3,.wav,.ogg,.flac,.m4a,.aac" />
+          <div><strong>点击选择</strong> 或拖拽音频文件到这里</div>
+          <div class="hint">支持 MP3 / WAV / OGG / FLAC / M4A / AAC，单文件最大 15MB</div>
+        </label>
+        <div style="display:flex;gap:10px;align-items:flex-end;margin-top:14px;flex-wrap:wrap">
+          <label class="field" style="flex:1;min-width:240px;margin-bottom:0">
+            <span class="lbl">显示标题（可选，留空则取文件名）</span>
+            <input type="text" id="title" maxlength="200" placeholder="例如：夜曲" />
+          </label>
+          <button class="btn btn-primary" id="upload-btn" type="button" disabled>上传</button>
+        </div>
+      </div>
+
+      <!-- 列表 -->
+      <div class="card" style="margin-top:24px;padding:0">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:42%">标题</th>
+              <th style="width:10%">大小</th>
+              <th style="width:18%">上传时间</th>
+              <th style="width:30%;text-align:right">操作</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <tr><td colspan="4" class="empty">加载中…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </main>
+
+  </div>
+
+  <script src="/managers/admin.js"></script>
+  <script>
+    (() => {
+      const { api, guard, bindNav, escapeHtml } = window.admin;
+
+      const noticeEl = document.getElementById('notice');
+      const activeBannerEl = document.getElementById('active-banner');
+      const dropZone = document.getElementById('drop-zone');
+      const fileInput = document.getElementById('file');
+      const titleInput = document.getElementById('title');
+      const uploadBtn = document.getElementById('upload-btn');
+      const rowsEl = document.getElementById('rows');
+
+      let pendingFile = null;
+
+      function showNotice(type, msg) {
+        noticeEl.className = 'notice ' + type + ' is-visible';
+        noticeEl.textContent = msg;
+      }
+      function hideNotice() { noticeEl.className = 'notice'; }
+
+      function fmtSize(n) {
+        if (n < 1024) return n + ' B';
+        if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+        return (n / 1024 / 1024).toFixed(2) + ' MB';
+      }
+
+      function renderActive(song) {
+        if (!song) {
+          activeBannerEl.innerHTML = `
+            <div class="active-banner" style="background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.08)">
+              <span class="badge" style="background:var(--muted)">未激活</span>
+              <span class="meta">还没选歌。下方选一首设为当前播放，前台播放器就会播它。</span>
+            </div>`;
+          return;
+        }
+        activeBannerEl.innerHTML = `
+          <div class="active-banner">
+            <span class="badge">当前播放</span>
+            <span class="name">${escapeHtml(song.title)}</span>
+            <span class="meta">· ${escapeHtml(song.original_name)} · ${fmtSize(song.size_bytes)}</span>
+          </div>`;
+      }
+
+      async function load() {
+        hideNotice();
+        rowsEl.innerHTML = '<tr><td colspan="4" class="empty">加载中…</td></tr>';
+        try {
+          const data = await api('GET', '/api/music');
+          const activeSong = data.items.find(s => s.is_active) || null;
+          renderActive(activeSong);
+
+          if (!data.items.length) {
+            rowsEl.innerHTML = '<tr><td colspan="4" class="empty">还没有歌曲。先上传一首吧 ↑</td></tr>';
+            return;
+          }
+
+          rowsEl.innerHTML = data.items.map(s => `
+            <tr>
+              <td>
+                <strong>${escapeHtml(s.title)}</strong>${s.is_active ? ' <span class="tag tag-active">当前播放</span>' : ''}
+                <div style="color:var(--muted);font-size:12px;margin-top:2px">${escapeHtml(s.original_name)} · ${escapeHtml(s.mime)}</div>
+              </td>
+              <td style="color:var(--muted);font-size:13px">${fmtSize(s.size_bytes)}</td>
+              <td style="color:var(--muted);font-size:13px">${(s.created_at || '').replace('T', ' ').slice(0, 16)}</td>
+              <td style="text-align:right;white-space:nowrap">
+                <button class="btn btn-ghost" data-act="play"  data-src="${escapeHtml(s.src)}" data-title="${escapeHtml(s.title)}">试听</button>
+                ${s.is_active
+                  ? '<button class="btn btn-ghost" data-act="clear">取消激活</button>'
+                  : `<button class="btn btn-primary" data-act="activate" data-id="${s.id}">设为当前</button>`}
+                <button class="btn btn-danger" data-act="delete" data-id="${s.id}" data-title="${escapeHtml(s.title)}">删除</button>
+              </td>
+            </tr>
+          `).join('');
+
+          rowsEl.querySelectorAll('button[data-act]').forEach(b => {
+            b.addEventListener('click', () => onAction(b));
+          });
+        } catch (e) {
+          rowsEl.innerHTML = `<tr><td colspan="4" class="empty">加载失败：${escapeHtml(e.message)}</td></tr>`;
+        }
+      }
+
+      function onAction(btn) {
+        const act = btn.dataset.act;
+        if (act === 'play') {
+          // 简单的试听弹窗：用浏览器原生 audio 元素播放一次
+          playPreview(btn.dataset.src, btn.dataset.title);
+        } else if (act === 'activate') {
+          activate(parseInt(btn.dataset.id, 10));
+        } else if (act === 'clear') {
+          clearActive();
+        } else if (act === 'delete') {
+          removeSong(parseInt(btn.dataset.id, 10), btn.dataset.title);
+        }
+      }
+
+      function playPreview(src, title) {
+        let overlay = document.getElementById('preview-overlay');
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.id = 'preview-overlay';
+          overlay.style.cssText = 'position:fixed;inset:0;z-index:50;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+          overlay.innerHTML = `
+            <div style="background:rgba(255,255,255,0.95);border-radius:14px;padding:24px;width:min(420px,90vw);box-shadow:0 12px 48px rgba(0,0,0,0.25)">
+              <div id="preview-title" style="font-weight:600;margin-bottom:12px">试听</div>
+              <audio id="preview-audio" controls style="width:100%"></audio>
+              <div style="text-align:right;margin-top:14px">
+                <button class="btn btn-ghost" id="preview-close" type="button">关闭</button>
+              </div>
+            </div>`;
+          document.body.appendChild(overlay);
+          overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) closePreview();
+          });
+          document.getElementById('preview-close').addEventListener('click', closePreview);
+        }
+        document.getElementById('preview-title').textContent = '试听 · ' + (title || '');
+        const audio = document.getElementById('preview-audio');
+        audio.src = src;
+        audio.play().catch(() => {});
+        overlay.style.display = 'flex';
+      }
+      function closePreview() {
+        const overlay = document.getElementById('preview-overlay');
+        if (!overlay) return;
+        const audio = document.getElementById('preview-audio');
+        if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); }
+        overlay.style.display = 'none';
+      }
+
+      async function activate(id) {
+        try {
+          await api('PATCH', '/api/music/active', { id });
+          showNotice('success', '✓ 已设为当前播放');
+          load();
+        } catch (e) {
+          showNotice('error', '设置失败：' + e.message);
+        }
+      }
+      async function clearActive() {
+        try {
+          await api('PATCH', '/api/music/active', { id: null });
+          showNotice('success', '✓ 已取消激活');
+          load();
+        } catch (e) {
+          showNotice('error', '取消失败：' + e.message);
+        }
+      }
+      async function removeSong(id, title) {
+        if (!confirm(`确定删除《${title}》？此操作不可恢复。`)) return;
+        try {
+          await api('DELETE', '/api/music/' + id);
+          showNotice('success', '✓ 已删除');
+          load();
+        } catch (e) {
+          showNotice('error', '删除失败：' + e.message);
+        }
+      }
+
+      // —— 上传交互 ——
+      function setPending(file) {
+        pendingFile = file || null;
+        uploadBtn.disabled = !pendingFile;
+        if (pendingFile) {
+          // 自动用文件名（去扩展名）填充标题，仅在用户未改过时
+          if (!titleInput.dataset.touched) {
+            titleInput.value = (pendingFile.name || '').replace(/\.[^.]+$/, '');
+          }
+        }
+      }
+      titleInput.addEventListener('input', () => { titleInput.dataset.touched = '1'; });
+
+      fileInput.addEventListener('change', () => setPending(fileInput.files[0]));
+      ;['dragenter', 'dragover'].forEach(ev => {
+        dropZone.addEventListener(ev, (e) => {
+          e.preventDefault(); e.stopPropagation();
+          dropZone.classList.add('is-dragover');
+        });
+      });
+      ;['dragleave', 'drop'].forEach(ev => {
+        dropZone.addEventListener(ev, (e) => {
+          e.preventDefault(); e.stopPropagation();
+          dropZone.classList.remove('is-dragover');
+        });
+      });
+      dropZone.addEventListener('drop', (e) => {
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) {
+          // 把文件同步到 input，让原生表单也能用
+          const dt = new DataTransfer();
+          dt.items.add(f);
+          fileInput.files = dt.files;
+          setPending(f);
+        }
+      });
+
+      uploadBtn.addEventListener('click', async () => {
+        if (!pendingFile) return;
+        uploadBtn.disabled = true;
+        const originalLabel = uploadBtn.textContent;
+        uploadBtn.textContent = '上传中…';
+        hideNotice();
+        try {
+          const form = new FormData();
+          form.append('file', pendingFile);
+          if (titleInput.value.trim()) form.append('title', titleInput.value.trim());
+          const res = await fetch('/api/music', {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: form,
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+          showNotice('success', '✓ 上传成功');
+          // 重置表单
+          pendingFile = null;
+          fileInput.value = '';
+          titleInput.value = '';
+          titleInput.dataset.touched = '';
+          uploadBtn.disabled = true;
+          uploadBtn.textContent = originalLabel;
+          load();
+        } catch (e) {
+          showNotice('error', '上传失败：' + e.message);
+          uploadBtn.disabled = false;
+          uploadBtn.textContent = originalLabel;
+        }
+      });
+
+      (async () => {
+        const user = await guard();
+        if (user) {
+          bindNav(user);
+          load();
+        }
+      })();
+    })();
+  </script>
+</body>
+</html>
