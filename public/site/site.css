@@ -318,8 +318,9 @@ a { color: inherit; }
   height: 4px;
   background: rgba(0, 0, 0, 0.1);
   border-radius: 2px;
-  cursor: pointer;
+  cursor: default;
   overflow: hidden;
+  pointer-events: none;
 }
 .player-progress-fill {
   height: 100%;

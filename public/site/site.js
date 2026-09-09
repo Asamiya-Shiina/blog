@@ -156,11 +156,10 @@
     audio.addEventListener('loadedmetadata', () => {
       if (isFinite(audio.duration)) bar.title = '0:00 / ' + format(audio.duration);
     });
-    bar.addEventListener('click', (e) => {
-      if (!isFinite(audio.duration) || audio.duration === 0) return;
-      const rect = bar.getBoundingClientRect();
-      audio.currentTime = ((e.clientX - rect.left) / rect.width) * audio.duration;
-    });
+    // 进度条只读：禁止点击/拖动跳转
+    bar.addEventListener('click',     (e) => { e.preventDefault(); e.stopPropagation(); });
+    bar.addEventListener('mousedown',  (e) => { e.preventDefault(); e.stopPropagation(); });
+    bar.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); }, { passive: false });
 
     function format(s) {
       const m = Math.floor(s / 60);
