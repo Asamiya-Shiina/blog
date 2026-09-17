@@ -190,7 +190,7 @@ function renderFloatingUI({ withLogin = false } = {}) {
   <!-- 播放器 -->
   <div class="player" id="player">
     <div class="player-cover">
-      <img src="/image/IMG_20250703_100031.jpeg" alt="封面" />
+      <img src="/image/IMG_20250703_100031.jpeg" alt="封面" draggable="false" />
     </div>
     <div class="player-info">
       <div class="player-title">歌曲名</div>
@@ -200,7 +200,7 @@ function renderFloatingUI({ withLogin = false } = {}) {
       <svg class="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
       <svg class="icon-pause" viewBox="0 0 24 24"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
     </button>
-    <audio id="audio" src="/audio/song.mp3" preload="metadata" loop></audio>
+    <audio id="audio" preload="metadata" loop></audio>
   </div>
   <script src="/site/site.js"></script>
   `;

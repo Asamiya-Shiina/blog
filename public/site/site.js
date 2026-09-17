@@ -20,6 +20,10 @@
   // —— 播放器：拖动 + 吸边 ——
   const player = document.getElementById('player');
   if (player) {
+    // 封面图不可被拖走：阻止原生图片拖拽（配合 img 的 draggable=false）
+    player.addEventListener('dragstart', (e) => {
+      if (e.target && e.target.tagName === 'IMG') e.preventDefault();
+    });
     const MARGIN_DESKTOP = 36;
     const MARGIN_MOBILE  = 20;
     const SNAP_THRESHOLD = 6;
@@ -141,6 +145,7 @@
   const bar   = document.querySelector('.player-progress');
   const titleEl = document.querySelector('.player-title');
   if (audio && btn) {
+    let pendingSeek = null;  // 刷新后恢复进度：等 loadedmetadata 就绪再跳转
     btn.addEventListener('click', () => {
       if (!audio.src) return;  // 没有选中歌曲时不响应
       if (audio.paused) audio.play().catch(() => {});
@@ -154,7 +159,47 @@
       fill.style.width = (audio.currentTime / audio.duration) * 100 + '%';
     });
     audio.addEventListener('loadedmetadata', () => {
-      if (isFinite(audio.duration)) bar.title = '0:00 / ' + format(audio.duration);
+      if (isFinite(audio.duration)) {
+        bar.title = '0:00 / ' + format(audio.duration);
+        // 刷新后回到同一首歌时，恢复上次进度
+        if (pendingSeek != null) {
+          try { audio.currentTime = Math.min(pendingSeek, audio.duration || pendingSeek); } catch {}
+          pendingSeek = null;
+        }
+      }
+    });
+
+    // —— 播放续播（sessionStorage） ——
+    // 用 sessionStorage 而非 localStorage：同一浏览会话内（F5 刷新、站内跳转）
+    // 记住进度可续播；但关闭浏览器/页签即清空，重开时从新播放。
+    const STORE_KEY = 'playerState';
+    function savePlayerState(src, time, playing) {
+      try {
+        sessionStorage.setItem(STORE_KEY, JSON.stringify({ src, time: Math.floor(time || 0), playing: !!playing }));
+      } catch {}
+    }
+    function loadPlayerState() {
+      try {
+        const d = JSON.parse(sessionStorage.getItem(STORE_KEY) || 'null');
+        return d && d.src ? d : null;
+      } catch { return null; }
+    }
+
+    // 周期性（约 1s）持久化进度；播放/暂停时立即存状态；刷新或切后台前最终落盘
+    let prefersPlaying = false;
+    let lastPersist = 0;
+    const persistNow = () => {
+      const src = audio.getAttribute('src');
+      if (src) savePlayerState(src, audio.currentTime, prefersPlaying);
+    };
+    audio.addEventListener('play',  () => { prefersPlaying = true;  persistNow(); lastPersist = Date.now(); });
+    audio.addEventListener('pause', () => { prefersPlaying = false; persistNow(); lastPersist = Date.now(); });
+    audio.addEventListener('timeupdate', () => {
+      if (Date.now() - lastPersist > 1000) { lastPersist = Date.now(); persistNow(); }
+    });
+    window.addEventListener('pagehide', persistNow);          // 刷新/关闭前保存最终位置
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') persistNow();
     });
     // 进度条只读：禁止点击/拖动跳转
     bar.addEventListener('click',     (e) => { e.preventDefault(); e.stopPropagation(); });
@@ -200,8 +245,47 @@
       if (titleEl) titleEl.textContent = song.title || '未命名';
     }
 
-    // 首次加载
-    loadActiveSong().then(applySong);
+    // —— 自动播放 ——
+    // 浏览器默认拦截『有声自动播放』（需用户手势才能出声）。
+    // 策略：加载后先尝试一次；此后持续监听各种用户手势，一旦用户
+    // 有点击/按键等交互就立即开播，监听一直保持到真正响起来为止。
+    function tryAutoplay() {
+      if (btn.disabled) return;                  // 尚未选择歌曲
+      if (!audio.paused) return;                 // 已在播放
+      audio.play().catch(() => { /* 拦截则继续等手势 */ });
+    }
+
+    const GESTURES = ['pointerdown', 'touchstart', 'mousedown', 'keydown'];
+    function onUserGesture(e) {
+      // 播放按钮自带播放/暂停切换逻辑，点它会与这里的全局手势重复触发
+      // （按下触发 play，松开又触发 pause）。忽略按钮上的事件，让它自管。
+      if (btn.contains(e.target)) return;
+      tryAutoplay();
+    }
+
+    // 已开始播放后不再需要手势兜底，移除监听
+    audio.addEventListener('play', () => {
+      GESTURES.forEach(evt => window.removeEventListener(evt, onUserGesture));
+    }, { once: true });
+    GESTURES.forEach(evt =>
+      window.addEventListener(evt, onUserGesture, { passive: true })
+    );
+
+    // 首次加载：恢复上次进度，并按其之前的状态决定是否自动开播
+    function resumeLastPlayback(song) {
+      const state = loadPlayerState();
+      if (!song) return false;
+      // 无历史记录，或已经不是同一首歌 → 当作首次访问，尝试自动播放
+      if (!state || song.src !== state.src) return true;
+      // 同一首歌：准备跳回上次进度
+      pendingSeek = (isFinite(state.time) && state.time > 0) ? state.time : null;
+      // 之前是否在播，决定这次要不要接着自动播（否则保持暂停）
+      return !!state.playing;
+    }
+    loadActiveSong().then((song) => {
+      applySong(song);
+      if (resumeLastPlayback(song)) tryAutoplay();
+    });
     // 标签页回到前台时重新拉一次（管理员刚换歌能立即生效）
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
