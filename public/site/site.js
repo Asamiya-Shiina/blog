@@ -262,6 +262,8 @@
       // 播放按钮自带播放/暂停切换逻辑，点它会与这里的全局手势重复触发
       // （按下触发 play，松开又触发 pause）。忽略按钮上的事件，让它自管。
       if (btn.contains(e.target)) return;
+      // 用户上一页手动暂停过：不让随手点击又把音乐拉起来
+      if (!userWantsPlay) return;
       tryAutoplay();
     }
 
@@ -286,7 +288,11 @@
     }
     loadActiveSong().then((song) => {
       applySong(song);
-      if (resumeLastPlayback(song)) tryAutoplay();
+      // 以『是否该播放』的结论初始化播放意图：
+      // 首次访问/原本在听 → 想播（允许手势兜底自动开播）；
+      // 上一页手动暂停过 → 不想播（收起自动开播，除非用户主动点播放）。
+      userWantsPlay = resumeLastPlayback(song);
+      if (userWantsPlay) tryAutoplay();
     });
     // —— 页面失焦自动暂停 / 回焦自动播放 ——
     // 切走标签页或切到其他窗口时暂停，切回来接着播。
