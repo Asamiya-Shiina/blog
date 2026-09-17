@@ -148,8 +148,8 @@
     let pendingSeek = null;  // 刷新后恢复进度：等 loadedmetadata 就绪再跳转
     btn.addEventListener('click', () => {
       if (!audio.src) return;  // 没有选中歌曲时不响应
-      if (audio.paused) audio.play().catch(() => {});
-      else audio.pause();
+      if (audio.paused) { userWantsPlay = true;  audio.play().catch(() => {}); }
+      else              { userWantsPlay = false; audio.pause(); }
     });
     audio.addEventListener('play',  () => btn.classList.add('is-playing'));
     audio.addEventListener('pause', () => btn.classList.remove('is-playing'));
@@ -185,15 +185,17 @@
       } catch { return null; }
     }
 
-    // 周期性（约 1s）持久化进度；播放/暂停时立即存状态；刷新或切后台前最终落盘
-    let prefersPlaying = false;
+    // 周期性（约 1s）持久化进度与播放意图；播放/暂停时立即存；刷新或切后台前最终落盘。
+    // userWantsPlay 表示『用户是否在听』——自动暂停不会清零，只有手动暂停才清零，
+    // 这样站内跳转时下一页仍知道「用户想继续听」，从而自动续播。
+    let userWantsPlay = false;
     let lastPersist = 0;
     const persistNow = () => {
       const src = audio.getAttribute('src');
-      if (src) savePlayerState(src, audio.currentTime, prefersPlaying);
+      if (src) savePlayerState(src, audio.currentTime, userWantsPlay);
     };
-    audio.addEventListener('play',  () => { prefersPlaying = true;  persistNow(); lastPersist = Date.now(); });
-    audio.addEventListener('pause', () => { prefersPlaying = false; persistNow(); lastPersist = Date.now(); });
+    audio.addEventListener('play',  () => { userWantsPlay = true; persistNow(); lastPersist = Date.now(); });
+    audio.addEventListener('pause', () => { persistNow(); lastPersist = Date.now(); });
     audio.addEventListener('timeupdate', () => {
       if (Date.now() - lastPersist > 1000) { lastPersist = Date.now(); persistNow(); }
     });
@@ -286,12 +288,38 @@
       applySong(song);
       if (resumeLastPlayback(song)) tryAutoplay();
     });
-    // 标签页回到前台时重新拉一次（管理员刚换歌能立即生效）
+    // —— 页面失焦自动暂停 / 回焦自动播放 ——
+    // 切走标签页或切到其他窗口时暂停，切回来接着播。
+    // 只用 autoPaused 标记分辨「因失焦而暂停」，避免用户手动暂停后也被莫名续播。
+    let autoPaused = false;
+
+    function maybePauseTrack() {
+      // 用户没在听（从未播或手动暂停过）就不处理；只有确认用户在听才失焦暂停
+      if (btn.disabled || !userWantsPlay || audio.paused) return;
+      audio.pause();
+      autoPaused = true;                          // 仅真正暂停时才标记
+    }
+    function maybeResumeTrack() {
+      if (btn.disabled) return;
+      if (audio.paused && autoPaused) {           // 仅恢复「因失焦被自动暂停」的播放
+        audio.play().catch(() => {});
+      }
+      autoPaused = false;
+    }
+
+    // 切标签页/最小化：document 可见性变化
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'hidden') {
+        maybePauseTrack();
+      } else {
+        maybeResumeTrack();
+        // 标签页回到前台时重新拉一次（管理员刚换歌能立即生效）
         loadActiveSong().then(applySong);
       }
     });
+    // 切到其他应用窗口：浏览器失去窗口焦点
+    window.addEventListener('blur',  maybePauseTrack);
+    window.addEventListener('focus', maybeResumeTrack);
   }
 
   // —— 实时状态 ——
