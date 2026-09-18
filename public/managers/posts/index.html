@@ -67,17 +67,20 @@
   <script src="/managers/admin.js"></script>
   <script>
     (() => {
+      // 从共用库解构 api（fetch 封装）与 escapeHtml（XSS 转义）
       const { api, escapeHtml } = window.admin;
       const rowsEl   = document.getElementById('rows');
-      const qEl      = document.getElementById('q');
-      const statusEl = document.getElementById('status');
+      const qEl      = document.getElementById('q');        // 搜索关键字输入框
+      const statusEl = document.getElementById('status');   // 状态筛选下拉（全部/已发布/草稿）
       const prevBtn  = document.getElementById('prev');
       const nextBtn  = document.getElementById('next');
       const pageInfo = document.getElementById('page-info');
 
-      let page = 1;
+      let page = 1;   // 当前页码，翻页/筛选时更新
 
+      // 拉取并渲染一页文章
       async function load() {
+        // 把搜索关键字、状态筛选用 query 参数拼到请求里
         const params = new URLSearchParams({ page });
         const q = qEl.value.trim();
         if (q) params.set('q', q);
@@ -101,21 +104,23 @@
                 </td>
               </tr>
             `).join('');
+            // 给每行的删除按钮绑事件（用事件委托遍历查询，避免逐个闭包绑定）
             rowsEl.querySelectorAll('.btn-danger').forEach(b => {
               b.addEventListener('click', async (e) => {
-                e.stopPropagation();
+                e.stopPropagation();   // 阻止冒泡，避免误触整行的「点此行进编辑」
                 const id = b.dataset.id;
                 const title = b.dataset.title;
                 if (!confirm(`确定删除《${title}》？此操作不可恢复。`)) return;
                 try {
                   await api('DELETE', '/api/posts/' + id);
-                  load();
+                  load();   // 删除后刷新当前页
                 } catch (err) {
                   alert('删除失败：' + err.message);
                 }
               });
             });
           }
+          // 更新分页按钮可用态与页码信息
           const totalPages = Math.max(1, Math.ceil(data.total / data.page_size));
           pageInfo.textContent = `第 ${page} / ${totalPages} 页 · 共 ${data.total} 篇`;
           prevBtn.disabled = page <= 1;
@@ -125,13 +130,14 @@
         }
       }
 
+      // 搜索/筛选切换时都回到第 1 页再刷新；上下页则直接当前页±1
       document.getElementById('search-btn').addEventListener('click', () => { page = 1; load(); });
       qEl.addEventListener('keydown', e => { if (e.key === 'Enter') { page = 1; load(); } });
       statusEl.addEventListener('change', () => { page = 1; load(); });
       prevBtn.addEventListener('click', () => { page--; load(); });
       nextBtn.addEventListener('click', () => { page++; load(); });
 
-      load();
+      load();   // 首屏渲染
     })();
   </script>
 </body>

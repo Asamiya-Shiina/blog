@@ -80,6 +80,7 @@
   <script src="/managers/admin.js"></script>
   <script>
     (() => {
+      // 从共用库解构 api（fetch 封装）与 escapeHtml（XSS 转义）
       const { api, escapeHtml } = window.admin;
       const $ = (id) => document.getElementById(id);
       const titleEl    = $('title');
@@ -93,8 +94,12 @@
       const pubBtn     = $('publish');
       const delBtn     = $('delete');
 
+      // 通过 URL 上的 ?id= 判断是「编辑已有文章」还是「新建文章」
+      // postId 为空 → 新建；否则 → 编辑该 id 的文章
       const postId = new URLSearchParams(location.search).get('id');
+      // slugDirty：标记用户是否手动改过 slug。false 时标题变了会自动跟着生成 slug，true 则不再覆盖
       let slugDirty = !!slugEl.value;
+      // 记住上次保存的内容，供后续逻辑判断是否发生过改动
       let lastSavedMd = '';
       let lastSavedTitle = '';
 
@@ -104,6 +109,8 @@
       }
       function hideNotice() { noticeEl.className = 'notice'; }
 
+      // 与后端 src/routes/posts.js 的 slugify 一致：小写、空格/下划线转连字符、
+      // 去除非字母数字的字符、折叠连续连字符、去首尾连字符、截断到 80 字符
       function slugify(input) {
         return String(input || '')
           .toLowerCase()
@@ -114,14 +121,18 @@
           .slice(0, 80);
       }
 
+      // 自动生成 slug：用户没手动改过 slug 时，输入标题就实时补上 slug
       titleEl.addEventListener('input', () => {
         if (!slugDirty || !slugEl.value) {
           slugEl.value = slugify(titleEl.value);
           slugDirty = false;
         }
       });
+      // 用户一旦手动编辑 slug，就标记为"不再自动覆盖"
       slugEl.addEventListener('input', () => { slugDirty = true; });
 
+      // 右侧实时预览：输入停 300ms 后调 /api/posts/preview 把 Markdown 渲染成 HTML
+      // 防抖避免每次击键都发请求
       let previewTimer = null;
       async function refreshPreview() {
         const md = contentEl.value;
@@ -137,37 +148,47 @@
         previewTimer = setTimeout(refreshPreview, 300);
       });
 
-      async function save(status) {
+      // 保存/发布：status 传 'draft'（仅保存）或 'published'（保存并发布）
+    // 单个函数处理两套动作，区别只在 status 与提交后的跳转行为
+    async function save(status) {
         const title = titleEl.value.trim();
         const content_md = contentEl.value;
         const slug = slugEl.value.trim();
         const excerpt = excerptEl.value.trim() || null;
+        // 前端基础校验：标题、正文都必填，缺失则提示并中止保存
         if (!title)    { showNotice('error', '标题不能为空'); return; }
         if (!content_md) { showNotice('error', '正文不能为空'); return; }
+        // 发布是不可逆动作（会展示在前台），先二次确认
         if (status === 'published' && !confirm('确定发布这篇文章吗？')) return;
         statusEl.value = status;
         hideNotice();
         saveBtn.disabled = pubBtn.disabled = true;
         try {
           const payload = { title, content_md, status };
+          // 只把用户填了/自动生成了的 slug 和摘要带上，其余交给后端默认
           if (slug) payload.slug = slug;
           if (excerpt) payload.excerpt = excerpt;
           let res;
           if (postId) {
+            // 有 id → 更新已有文章（PUT）
             res = await api('PUT', '/api/posts/' + postId, payload);
           } else {
+            // 无 id → 新建（POST），后端会校验 slug 唯一并自动生成
             res = await api('POST', '/api/posts', payload);
           }
           lastSavedMd = res.content_md;
           lastSavedTitle = res.title;
           showNotice('success', status === 'published' ? '✓ 已发布' : '✓ 已保存');
+          // 发布成功直接回后台首页
           if (status === 'published') {
             setTimeout(() => { location.href = '/managers/'; }, 600);
             return;
           }
+          // 新建后把 URL 从「新建」替换成「编辑?id=xx」，这样刷新/删除都能命中同一篇文章
           if (!postId && res.id) {
             history.replaceState(null, '', '/managers/editor?id=' + res.id);
           }
+          // 有真实 id 的文章才显示删除按钮，并绑定删除逻辑
           if (res.id) {
             delBtn.style.display = '';
             delBtn.onclick = async () => {
@@ -188,6 +209,9 @@
       saveBtn.addEventListener('click', () => save('draft'));
       pubBtn.addEventListener('click',  () => save('published'));
 
+      // —— 页面加载时初始化 ——
+      // 有 postId → 拉取该文章内容填进表单（编辑模式）；
+      // 无 postId → 空表单（新建模式），直接显示一次空预览
       (async () => {
         if (postId) {
           try {

@@ -1,5 +1,26 @@
 'use strict';
 
+// ============================================================
+//  请求生命周期（一个浏览器请求从进来到回去的大致顺序）
+// ============================================================
+//  express 中间件按注册顺序依次执行，任何一步可终止请求：
+//
+//  1.  body 解析（JSON/URL编码）　→ cookieParser 把 cookie 解出来
+//  2.  统一安全响应头（nosniff / CSP / X-Frame-Options 等）
+//  3.  setupGuard　—— 无管理员时整个站重定向到 /setup/
+//  4. /managers/* → requireAdminPage　后台页面鉴权，未登录跳 /login/
+//  5.  API 路由（/api/* 下再细分）：
+//        /api/*          → authRoutes   （登录 / 注册 / 用户管理）
+//        /api/posts      → postsRoutes  （文章 CRUD，需登录）
+//        /api/music      → musicRoutes  （公开 /active + 管理员接口）
+//        /api/data       → statusRoutes （实时状态上报 / SSE / 配置）
+//  6.  公开阅读页：/、/posts、/posts/:slug、/search、/status、/image、/audio
+//  7.  静态资源 public/ → 兜底 404 → 全局错误处理
+//
+//  鉴权模型：登录成功写 httpOnly 的 `sid` cookie（HMAC 签名的 token）
+//  → requireAuth 解密并查库拿到 req.user → requireAdmin 检查角色。
+// ============================================================
+
 // 加载 .env 环境变量（SESSION_SECRET、COOKIE_SECURE 等）
 require('dotenv').config();
 

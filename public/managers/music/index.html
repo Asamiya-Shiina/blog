@@ -121,21 +121,23 @@
       const { api, guard, bindNav, escapeHtml } = window.admin;
 
       const noticeEl = document.getElementById('notice');
-      const activeBannerEl = document.getElementById('active-banner');
-      const dropZone = document.getElementById('drop-zone');
+      const activeBannerEl = document.getElementById('active-banner');   // 顶部「当前播放」横幅
+      const dropZone = document.getElementById('drop-zone');            // 可点击/拖拽的上传区
       const fileInput = document.getElementById('file');
       const titleInput = document.getElementById('title');
       const uploadBtn = document.getElementById('upload-btn');
       const rowsEl = document.getElementById('rows');
 
-      let pendingFile = null;
+      let pendingFile = null;   // 用户暂选、尚未提交的文件
 
+      // 顶部操作结果提示（成功/失败）
       function showNotice(type, msg) {
         noticeEl.className = 'notice ' + type + ' is-visible';
         noticeEl.textContent = msg;
       }
       function hideNotice() { noticeEl.className = 'notice'; }
 
+      // 字节数 → 人类可读大小（B / KB / MB）
       function fmtSize(n) {
         if (n < 1024) return n + ' B';
         if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
@@ -198,15 +200,16 @@
         }
       }
 
+      // 行内操作按钮的统一下发点：根据 data-act 分发到具体处理函数
       function onAction(btn) {
         const act = btn.dataset.act;
         if (act === 'play') {
           // 简单的试听弹窗：用浏览器原生 audio 元素播放一次
           playPreview(btn.dataset.src, btn.dataset.title);
         } else if (act === 'activate') {
-          activate(parseInt(btn.dataset.id, 10));
+          activate(parseInt(btn.dataset.id, 10));          // 设为当前播放
         } else if (act === 'clear') {
-          clearActive();
+          clearActive();                                    // 取消激活
         } else if (act === 'delete') {
           removeSong(parseInt(btn.dataset.id, 10), btn.dataset.title);
         }
@@ -276,35 +279,40 @@
       }
 
       // —— 上传交互 ——
+      // 记录当前待上传文件：有文件才启用上传按钮，无则禁用
       function setPending(file) {
         pendingFile = file || null;
         uploadBtn.disabled = !pendingFile;
         if (pendingFile) {
-          // 自动用文件名（去扩展名）填充标题，仅在用户未改过时
+          // 自动用文件名（去扩展名）填充标题，仅在用户未手动改过时
           if (!titleInput.dataset.touched) {
             titleInput.value = (pendingFile.name || '').replace(/\.[^.]+$/, '');
           }
         }
       }
+      // 用户一旦手动输入标题，就不再自动覆盖
       titleInput.addEventListener('input', () => { titleInput.dataset.touched = '1'; });
 
+      // 点选 / 拖拽两种方式都会走进 setPending
       fileInput.addEventListener('change', () => setPending(fileInput.files[0]));
+      // 拖拽悬停时高亮上传区
       ;['dragenter', 'dragover'].forEach(ev => {
         dropZone.addEventListener(ev, (e) => {
-          e.preventDefault(); e.stopPropagation();
+          e.preventDefault(); e.stopPropagation();   // 阻止浏览器默认行为（打开文件）
           dropZone.classList.add('is-dragover');
         });
       });
+      // 拖离/放下时取消高亮
       ;['dragleave', 'drop'].forEach(ev => {
         dropZone.addEventListener(ev, (e) => {
           e.preventDefault(); e.stopPropagation();
           dropZone.classList.remove('is-dragover');
         });
       });
+      // 拖入文件时：把文件写回 hidden input（这样原生表单/上传逻辑也能读到）
       dropZone.addEventListener('drop', (e) => {
         const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
         if (f) {
-          // 把文件同步到 input，让原生表单也能用
           const dt = new DataTransfer();
           dt.items.add(f);
           fileInput.files = dt.files;
@@ -312,6 +320,7 @@
         }
       });
 
+      // 实际上传：用 FormData 发送文件（multipart），后端 src/routes/music.js 解析
       uploadBtn.addEventListener('click', async () => {
         if (!pendingFile) return;
         uploadBtn.disabled = true;
@@ -330,7 +339,7 @@
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
           showNotice('success', '✓ 上传成功');
-          // 重置表单
+          // 成功后重置表单、按钮恢复
           pendingFile = null;
           fileInput.value = '';
           titleInput.value = '';
@@ -339,6 +348,7 @@
           uploadBtn.textContent = originalLabel;
           load();
         } catch (e) {
+          // 失败恢复按钮，允许重试
           showNotice('error', '上传失败：' + e.message);
           uploadBtn.disabled = false;
           uploadBtn.textContent = originalLabel;

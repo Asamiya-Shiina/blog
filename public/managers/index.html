@@ -56,9 +56,11 @@
 
   <script src="/managers/admin.js"></script>
   <script>
+    // 概览页脚本：拉取已发布/草稿数量，并展示最近更新的文章
     (async () => {
       const { api } = window.admin;
       try {
+        // 并行请求两种状态的第一页（后端分页，默认每页 20 篇），失败各自兜底为空
         const [pub, draft] = await Promise.all([
           api('GET', '/api/posts?status=published&page=1').catch(() => ({ total: 0, items: [] })),
           api('GET', '/api/posts?status=draft&page=1').catch(() => ({ total: 0, items: [] })),
@@ -66,6 +68,7 @@
         document.getElementById('stat-published').textContent = pub.total;
         document.getElementById('stat-draft').textContent     = draft.total;
 
+        // 「最近更新」= 已发布 + 草稿混合，按更新时间倒序排，取前 6 篇
         const recent = [...pub.items, ...draft.items]
           .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
           .slice(0, 6);
