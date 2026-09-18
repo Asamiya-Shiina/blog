@@ -15,4 +15,7 @@ data/
 *.swp
 *.swo
 docker-compose.override.yml
-client/*
+# 客户端：只跟踪 py 源码，忽略构建产物与打包配置
+client/build/
+client/dist/
+client/*.spec
