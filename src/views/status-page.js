@@ -1,11 +1,21 @@
 'use strict';
 
-// —— 实时状态页面视图 ——
-// 公开页面，通过 SSE 接收状态更新，显示当前活跃设备信息
+/**
+ * 实时状态页面视图（/status）
+ *
+ * 公开页面（无需登录），通过 SSE 接收 /api/data/stream 的状态更新，
+ * 显示当前活跃设备信息。每台设备显示：图标、应用名、窗口标题、设备名。
+ *
+ * 客户端逻辑见 public/site/status-client.js。
+ */
 
 const { SHARED_HEAD, renderFloatingUI } = require('./posts');
 
-// 渲染状态页：SSE 客户端通过 /site/status-client.js 接收实时更新
+/**
+ * 渲染状态页 HTML
+ *
+ * @returns {string} 完整的 HTML 文档字符串
+ */
 function renderStatusPage() {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
