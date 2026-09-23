@@ -86,27 +86,38 @@ const SHARED_HEAD = `
     .empty a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(59,130,246,0.3); }
 
     /* —— 文章详情页 —— */
-    .post-head { margin-bottom: 40px; animation: fadeUp 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+    .post-head { margin-bottom: 32px; animation: fadeUp 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+    .post-head .title-row { display: flex; align-items: baseline; gap: 14px; }
     .post-head h1 {
-      font-family: "Source Han Serif SC", "Noto Serif SC", "Songti SC", "STSong", Georgia, serif;
-      font-weight: 600;
-      font-size: 34px;
+      /* 花体（楷体）中文字体并倾斜 */
+      font-family: "STXinwei", "华文新魏", "FZXingKai-S05", "STKaiti", "华文楷体", serif;
+      font-style: italic;
+      font-weight: 400;
+      font-size: 44px;
       line-height: 1.35;
       letter-spacing: 0;
-      margin: 0 0 12px;
+      margin: 0;
+    }
+    .post-head .excerpt {
+      color: var(--muted);
+      font-family: "STXinwei", "华文新魏", "FZXingKai-S05", "STKaiti", "华文楷体", serif;
+      font-style: italic;
+      font-size: 18px;
+      margin: 0 0 2px; /* 基线对齐略偏低，形成偏右下 */
+      padding: 0;
+      white-space: nowrap;
+    }
+    .post-head .excerpt::before {
+      /* 两个破折号，拉开展宽避免显得短 */
+      content: '————';
+      letter-spacing: 0.08em;
+      margin-right: 0.4em;
     }
     .post-head .meta {
       color: var(--muted);
       font-size: 14px;
       font-variant-numeric: tabular-nums;
-    }
-    .post-head .excerpt {
-      color: var(--muted);
-      font-family: "Source Han Serif SC", "Noto Serif SC", "Songti SC", Georgia, serif;
-      font-style: italic;
-      font-size: 17px;
-      margin: 24px 0 0;
-      padding: 0;
+      margin-top: 14px;
     }
     .post-content {
       font-size: 17px;
@@ -265,9 +276,11 @@ function renderPostPage(post) {
   <main class="wrap wide">
     <article>
       <header class="post-head">
-        <h1>${escapeHtml(post.title)}</h1>
+        <div class="title-row">
+          <h1>${escapeHtml(post.title)}</h1>
+          ${post.excerpt ? `<p class="excerpt">${escapeHtml(post.excerpt)}</p>` : ''}
+        </div>
         <div class="meta">${escapeHtml(formatDate(post.published_at || post.updated_at))}</div>
-        ${post.excerpt ? `<p class="excerpt">${escapeHtml(post.excerpt)}</p>` : ''}
       </header>
       <div class="post-content">${html}</div>
     </article>
