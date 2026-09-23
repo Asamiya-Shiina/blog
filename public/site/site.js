@@ -72,14 +72,14 @@
       const vw = window.innerWidth, vh = window.innerHeight;
       const pw = player.offsetWidth, ph = player.offsetHeight;
       const rect = player.getBoundingClientRect();
-      const distLeft = rect.left, distRight = vw - rect.right, distBottom = vh - rect.bottom;
+      const distLeft = rect.left, distRight = vw - rect.right;
 
+      // 合并吸边逻辑：先按"离谁更近"决定左右，再按阈值贴边（避免两套分支冲突）
       let targetLeft = (distLeft <= distRight) ? m : vw - pw - m;
       let targetTop  = vh - ph - m;
 
       if (distLeft   < SNAP_THRESHOLD) targetLeft = m;
       if (distRight  < SNAP_THRESHOLD) targetLeft = vw - pw - m;
-      if (distBottom < SNAP_THRESHOLD) targetTop  = vh - ph - m;
 
       player.style.left = targetLeft + 'px';
       player.style.top  = targetTop  + 'px';
@@ -88,8 +88,10 @@
     player.addEventListener('mousedown', onDown);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-    // 手机端禁用拖动
-    if (window.innerWidth > 560) {
+    // 手机端禁用拖动；触屏桌面（如 Surface / iPad 横屏）也允许拖动。
+    // 用 matchMedia 区分触屏设备，比 `innerWidth > 560` 更准确。
+    const isCoarsePointer = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    if (!isCoarsePointer) {
       player.addEventListener('touchstart', onDown, { passive: true });
       window.addEventListener('touchmove', onMove, { passive: true });
       window.addEventListener('touchend', onUp);
@@ -381,8 +383,9 @@
       }
 
       const icon = getIcon(device.icon);
-      const titleHtml = device.title
-        ? `<div class="status-window-title" title="${escapeAttr(device.title)}">${escapeHtml(device.title)}</div>`
+      const safeTitle = (device.title != null && device.title !== '') ? String(device.title) : '';
+      const titleHtml = safeTitle
+        ? `<div class="status-window-title" title="${escapeAttr(safeTitle)}">${escapeHtml(safeTitle)}</div>`
         : '';
       statusBody.innerHTML = `
         <span class="status-dot"></span>
@@ -398,14 +401,18 @@
         '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
       }[c]));
     }
-    function escapeAttr(s) {
-      return escapeHtml(s).replace(/"/g, '&quot;');
-    }
+    // escapeAttr 与 escapeHtml 完全等价（双重转义会把 `&quot;` 变成 `&amp;quot;`）。
+    // 这里保留同名引用以免外部模板爆改，所有调用点统一走 escapeHtml。
+    const escapeAttr = escapeHtml;
 
     let evtSource = null;
+    let sseBackoffMs = 1000;
+    const SSE_MAX_BACKOFF = 30000;
     function connectSSE() {
       evtSource = new EventSource('/api/data/stream');
       evtSource.onmessage = (e) => {
+        // 收到一条正常消息，重置退避
+        sseBackoffMs = 1000;
         try {
           const data = JSON.parse(e.data);
           updateStatusCard(data);
@@ -413,7 +420,9 @@
       };
       evtSource.onerror = () => {
         evtSource.close();
-        setTimeout(connectSSE, 5000);
+        setTimeout(connectSSE, sseBackoffMs);
+        // 指数退避，封顶 30s，避免被网关拒后无限打
+        sseBackoffMs = Math.min(sseBackoffMs * 2, SSE_MAX_BACKOFF);
       };
     }
     connectSSE();

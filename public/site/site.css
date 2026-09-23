@@ -345,6 +345,14 @@ a { color: inherit; }
 .player-btn:hover { transform: scale(1.06); }
 .player-btn:active { transform: scale(0.94); }
 .player-btn svg { width: 14px; height: 14px; fill: #fff; }
+.player-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--muted);
+  box-shadow: none;
+}
+.player-btn:disabled:hover { transform: none; }
+.player-btn:disabled:active { transform: none; }
 .player-btn .icon-pause { display: none; }
 .player-btn.is-playing .icon-play { display: none; }
 .player-btn.is-playing .icon-pause { display: block; }
@@ -363,11 +371,14 @@ a { color: inherit; }
     top: 72px; right: 12px; bottom: 96px; left: 12px;
     max-width: none;
     margin: 0;
-    padding: 12px;
+    padding: 16px;
     -webkit-overflow-scrolling: touch;
     border-radius: 0 0 14px 14px;
   }
   .wrap.wide { max-width: none; }
+  /* 360 宽屏下 h1=34px 仍会溢出，缩到 28px */
+  header.hero h1 { font-size: 28px; line-height: 1.25; }
+  .skills ul { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
 
   .nav-toggle { top: 22px; left: 22px; }
   .nav-menu   { top: 68px; left: 22px; }
