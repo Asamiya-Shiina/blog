@@ -83,11 +83,14 @@
     for (const device of devices) {
       // 休息状态（客户端检测到 5 分钟无输入）：只显示一个咖啡杯图标
       if (device.icon === 'break') {
+        const host = device.id ? (device.id.split('_')[1] || '') : '';
+        const hostHtml = host ? `<div class="status-device-name">${escapeHtml(host)}</div>` : '';
         html += `
           <div class="status-display">
             <div class="status-icon-wrap active">☕</div>
             <div class="status-info">
               <div class="status-app-name">${escapeHtml(device.app)}</div>
+              ${hostHtml}
             </div>
           </div>
           <div class="status-time">最后更新: ${formatTime(device.updatedAt)}</div>`;

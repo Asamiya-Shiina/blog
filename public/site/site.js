@@ -374,11 +374,16 @@
 
       // 休息状态特殊显示
       if (device.icon === 'break') {
+        const host = device.id ? (device.id.split('_')[1] || '') : '';
+        const hostHtml = host
+          ? `<div class="status-window-title" title="${escapeAttr(host)}">${escapeHtml(host)}</div>`
+          : '';
         statusBody.innerHTML = `
           <span class="status-dot"></span>
           <div class="status-app-icon">☕</div>
           <div class="status-info">
             <div class="status-app-name">${escapeHtml(device.app)}</div>
+            ${hostHtml}
           </div>`;
         return;
       }
