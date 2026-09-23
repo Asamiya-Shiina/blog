@@ -101,6 +101,12 @@
       <p>以后可能会改吧</p>
     </section>
 
+    <!-- 今日浏览人数 -->
+    <section class="views reveal" id="views">
+      <h2>今日浏览</h2>
+      <p><span id="view-count">—</span> 人</p>
+    </section>
+
     <!-- 技能 -->
     <section class="skills reveal" id="skills">
       <h2>技能</h2>
@@ -159,5 +165,24 @@
   </div>
 
   <script src="/site/site.js"></script>
+  <script>
+    // 记录本次访问并拉取今日浏览人数
+    (function () {
+      // 上报访问（异步、失败静默）
+      fetch('/api/stats/view', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: '/' })
+      });
+      // 拉取今日人数
+      fetch('/api/stats/today')
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          var el = document.getElementById('view-count');
+          if (el && typeof d.count === 'number') el.textContent = d.count;
+        })
+        .catch(function () { /* 静默失败 */ });
+    })();
+  </script>
 </body>
 </html>

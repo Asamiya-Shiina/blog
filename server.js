@@ -110,6 +110,7 @@ app.use('/api', authRoutes);            // 登录、注册、用户管理
 app.use('/api/posts', postsRoutes);     // 文章 CRUD
 app.use('/api/music', musicRoutes);     // 音乐管理（公开的 /active + 管理接口）
 app.use('/api/data', require('./src/routes/status'));  // 实时状态上报与查询
+app.use('/api/stats', require('./src/routes/stats'));    // 访问统计
 
 // —— 公开文章页（无需登录） ——
 

@@ -76,6 +76,19 @@ db.exec(`
   );
   -- 初始化单行
   INSERT OR IGNORE INTO music_settings (id, active_id) VALUES (1, NULL);
+
+  -- 页面访问记录：用于统计今日浏览人数
+  -- 每页包含路径、访客 IP、访问时间
+  CREATE TABLE IF NOT EXISTS page_views (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    path       TEXT NOT NULL,                       -- 访问路径
+    ip         TEXT NOT NULL,                       -- 访客 IP
+    viewed_at  TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))  -- 北京时间
+  );
+  -- 按时间索引，加速今日统计查询
+  CREATE INDEX IF NOT EXISTS idx_page_views_at ON page_views(viewed_at);
+  -- 按 IP+时间索引，加速去重计数
+  CREATE INDEX IF NOT EXISTS idx_page_views_ip_at ON page_views(ip, viewed_at);
 `);
 
 // —— 数据库迁移 ——
