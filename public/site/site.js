@@ -369,7 +369,8 @@
       }
 
       statusBody.classList.add('is-active');
-      const device = devices[0]; // 最新的设备
+      // 休息中（break）优先级最低：只要还有其他状态，就优先显示其他状态的最新设备
+      const device = devices.find(d => d.icon !== 'break') || devices[0];
 
       // 休息状态特殊显示
       if (device.icon === 'break') {

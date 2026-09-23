@@ -61,7 +61,12 @@
    *   devices 来自 src/status-store.js getPublicStatus()，按更新时间倒序
    */
   function render(data) {
-    const devices = data && data.devices ? data.devices : [];
+    let devices = data && data.devices ? data.devices : [];
+
+    // 休息中（break）优先级最低：统一排到列表末尾，不打断其他状态的展示
+    const breaks = devices.filter(d => d.icon === 'break');
+    const others = devices.filter(d => d.icon !== 'break');
+    devices = others.concat(breaks);
 
     // 无活跃设备 → 显示"离线"
     if (devices.length === 0) {
