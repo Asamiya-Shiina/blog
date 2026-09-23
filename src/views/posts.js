@@ -88,11 +88,11 @@ const SHARED_HEAD = `
     /* —— 文章详情页 —— */
     .post-head { margin-bottom: 40px; animation: fadeUp 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
     .post-head h1 {
-      font-family: Georgia, "Times New Roman", "Songti SC", serif;
-      font-weight: 400;
-      font-size: 36px;
-      line-height: 1.25;
-      letter-spacing: -0.5px;
+      font-family: "Source Han Serif SC", "Noto Serif SC", "Songti SC", "STSong", Georgia, serif;
+      font-weight: 600;
+      font-size: 34px;
+      line-height: 1.35;
+      letter-spacing: 0;
       margin: 0 0 12px;
     }
     .post-head .meta {
@@ -102,10 +102,11 @@ const SHARED_HEAD = `
     }
     .post-head .excerpt {
       color: var(--muted);
-      font-size: 16px;
-      margin: 20px 0 0;
-      padding-left: 14px;
-      border-left: 2px solid var(--line);
+      font-family: "Source Han Serif SC", "Noto Serif SC", "Songti SC", Georgia, serif;
+      font-style: italic;
+      font-size: 17px;
+      margin: 24px 0 0;
+      padding: 0;
     }
     .post-content {
       font-size: 17px;
