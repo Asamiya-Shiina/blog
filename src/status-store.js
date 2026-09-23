@@ -70,12 +70,6 @@ function clearStatus(deviceId) {
   broadcast();
 }
 
-// 清除所有设备状态（管理操作）
-function clearAllStatus() {
-  devices.clear();
-  broadcast();
-}
-
 // 注册 SSE 客户端连接，断开时自动移除
 function addClient(res) {
   sseClients.add(res);
@@ -86,7 +80,7 @@ function addClient(res) {
 setInterval(cleanStaleDevices, 30_000);
 
 module.exports = {
-  updateStatus, clearStatus, clearAllStatus, getPublicStatus, addClient,
+  updateStatus, clearStatus, getPublicStatus, addClient,
   // 当前 SSE 连接数（用于限流判断）
   get clientCount() { return sseClients.size; },
 };

@@ -99,9 +99,6 @@
       const postId = new URLSearchParams(location.search).get('id');
       // slugDirty：标记用户是否手动改过 slug。false 时标题变了会自动跟着生成 slug，true 则不再覆盖
       let slugDirty = !!slugEl.value;
-      // 记住上次保存的内容，供后续逻辑判断是否发生过改动
-      let lastSavedMd = '';
-      let lastSavedTitle = '';
 
       function showNotice(type, msg) {
         noticeEl.className = 'notice ' + type + ' is-visible';
@@ -176,8 +173,6 @@
             // 无 id → 新建（POST），后端会校验 slug 唯一并自动生成
             res = await api('POST', '/api/posts', payload);
           }
-          lastSavedMd = res.content_md;
-          lastSavedTitle = res.title;
           showNotice('success', status === 'published' ? '✓ 已发布' : '✓ 已保存');
           // 发布成功直接回后台首页
           if (status === 'published') {
@@ -222,8 +217,6 @@
             statusEl.value  = p.status;
             excerptEl.value = p.excerpt || '';
             contentEl.value = p.content_md;
-            lastSavedMd     = p.content_md;
-            lastSavedTitle  = p.title;
             document.title  = 'Asamiya · ' + p.title;
             delBtn.style.display = '';
             delBtn.onclick = async () => {
