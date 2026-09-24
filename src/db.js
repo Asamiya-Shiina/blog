@@ -242,6 +242,27 @@ function userCount() {
 // （首次引导场景下最多让「无管理员」状态多持续 5 秒，可接受）
 function invalidateUserCount() { _userCountCache = null; _userCountCachedAt = 0; }
 
+// 清理 verify_expires 已过期的 pending 用户（注册后 15 分钟内未点验证链接）
+// 目的：释放被锁住的 username / email，让用户能立即重新注册
+// 返回被删除的记录 [{id, username, email}]，由调用方负责写审计日志
+// （db.js 不依赖 audit.js 以避免循环依赖）
+function sweepExpiredPendingUsers() {
+  // verify_expires 存的是 ISO 8601（'2026-09-24T15:55:05.694Z'），
+  // 字典序等价于时间序，JS 侧 new Date().toISOString() 同格式可直接比较
+  const now = new Date().toISOString();
+  const expired = db.prepare(
+    "SELECT id, username, email FROM users WHERE status='pending' AND verify_expires IS NOT NULL AND verify_expires < ?"
+  ).all(now);
+  if (expired.length === 0) return [];
+  const delOne = db.prepare('DELETE FROM users WHERE id = ?');
+  db.transaction(() => {
+    for (const r of expired) delOne.run(r.id);
+  })();
+  invalidateUserCount();
+  return expired;
+}
+
 module.exports = db;
 module.exports.userCount = userCount;
 module.exports.invalidateUserCount = invalidateUserCount;
+module.exports.sweepExpiredPendingUsers = sweepExpiredPendingUsers;

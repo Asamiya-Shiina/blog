@@ -11,12 +11,14 @@ const { Readable } = require('node:stream');
 const express = require('express');
 const bcrypt = require('bcrypt');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = require('express-rate-limit');
 const { z } = require('zod');
 
 const db = require('../db');
 const captcha = require('../captcha');
 const mailer = require('../mailer');
 const audit = require('../audit');
+const emailPolicy = require('../email-policy');
 const cryptoBox = require('../crypto-box');
 const {
   setSessionCookie,
@@ -96,6 +98,20 @@ const writeLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'too many requests, try again later' },
+});
+
+// 按邮箱限流：每个邮箱 1 小时内最多 5 次注册尝试，防抢注/骚扰
+// key 用 body.email（小写）；缺失时退到 IP，避免无 body 请求共用一个桶
+// 注：跟 writeLimiter（按 IP）正交，一个限恶意 IP，一个限被抢注的邮箱
+const emailRegisterLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return (typeof req.body?.email === 'string' ? req.body.email.toLowerCase() : null) || ipKeyGenerator(req.ip);
+  },
+  message: { error: 'this email has too many registration attempts, try again later' },
 });
 
 // captcha 限流：每 IP 每分钟最多 30 次，防 captcha 内存被打满
@@ -209,13 +225,17 @@ router.get('/captcha', captchaLimiter, (_req, res) => {
 // 流程：滑块验证 → Zod 校验 → 查 SMTP 是否已配置
 //   - 已配置 SMTP：创建 pending 用户，发验证邮件，needsVerify=true
 //   - 未配置 SMTP：创建 active 用户，needsVerify=false（跳过邮箱验证）
-router.post('/register', writeLimiter, async (req, res) => {
+router.post('/register', writeLimiter, emailRegisterLimiter, async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid request' });
   const { username, password, password_hash, email, captcha_token, captcha_x } = parsed.data;
 
   // 站点已初始化才开放注册；首个账户仍走 /setup
   if (db.userCount() === 0) return res.status(409).json({ error: 'setup required' });
+  // 邮箱域名白名单：拒绝一次性/匿名/企业/学校邮箱，只放行主流个人邮箱
+  if (!emailPolicy.isDomainAllowed(email)) {
+    return res.status(400).json({ error: '请使用主流个人邮箱（Gmail / QQ / Outlook / 163 等）' });
+  }
   if (!captcha.verify(captcha_token, captcha_x)) return res.status(400).json({ error: 'captcha failed' });
 
   const pw = password_hash || password;
@@ -226,6 +246,12 @@ router.post('/register', writeLimiter, async (req, res) => {
   // 先分别查 username / email 是否被占用，再决定返回，统一 409 消息。
   // 如果直接 INSERT 让 UNIQUE 约束抛异常再捕获，异常时机因命中列不同而不同，
   // 攻击者可以通过响应时间差分辨出「username 已存在」还是「email 已存在」。
+  // 先 sweep 一次：把过期的 pending 用户立刻清掉，避免「填错邮箱没收到验证信 → 名字被锁 1 分钟」
+  const expiredNow = db.sweepExpiredPendingUsers();
+  for (const u of expiredNow) {
+    // targetId=null：写审计时用户已删，FK 会失败；detail 里带 username/email 足够追溯
+    audit.log({ actorId: null, targetId: null, action: 'user.expired', detail: { username: u.username, email: u.email } });
+  }
   const userByName = db.prepare('SELECT 1 FROM users WHERE username = ?').get(username);
   const userByEmail = db.prepare('SELECT 1 FROM users WHERE email = ?').get(email);
   if (userByName || userByEmail) {
@@ -239,7 +265,7 @@ router.post('/register', writeLimiter, async (req, res) => {
       const verifyToken = crypto.randomBytes(24).toString('hex');
       const verifyExpires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       user = await createUser({ username, password: pw, preHashed, role: 'user', email, status: 'pending', verifyToken, verifyExpires });
-      const result = await mailer.sendVerifyEmail(verifyToken, email);
+      const result = await mailer.sendVerifyEmail(verifyToken, email, username);
       if (!result.sent) {
         console.log(`[dev] verify link for ${email}: /api/verify?token=${verifyToken}`);
       }

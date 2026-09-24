@@ -31,6 +31,7 @@ const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 
 const db = require('./src/db');
+const audit = require('./src/audit');
 const authRoutes = require('./src/routes/auth');
 const postsRoutes = require('./src/routes/posts');
 const musicRoutes = require('./src/routes/music');
@@ -316,6 +317,27 @@ function repeatSearchGuard(req, res, next) {
 // 定期清理过期的 lastSearch 条目（默认每 60 秒一次），不再每次搜索都遍历
 const lastSearchSweep = setInterval(sweepLastSearch, 60_000);
 lastSearchSweep.unref();   // 不阻塞进程退出
+
+// 定期清理过期未验证的 pending 用户（验证链接 15 分钟有效，过期即视为放弃）
+// 释放被锁住的 username / email，避免「没收到邮件 → 账号卡住无法重新注册」
+const PENDING_SWEEP_INTERVAL_MS = 60_000;
+function sweepExpiredPending() {
+  try {
+    const deleted = db.sweepExpiredPendingUsers();
+    if (deleted.length === 0) return;
+    for (const u of deleted) {
+      // targetId=null：写审计时用户已删，FK 会失败；detail 里带 username/email 足够追溯
+      audit.log({ actorId: null, targetId: null, action: 'user.expired', detail: { username: u.username, email: u.email } });
+    }
+    console.log(`[cleanup] removed ${deleted.length} expired pending user(s)`);
+  } catch (e) {
+    console.warn('pending user sweep failed:', e.message);
+  }
+}
+const pendingSweep = setInterval(sweepExpiredPending, PENDING_SWEEP_INTERVAL_MS);
+pendingSweep.unref();   // 不阻塞进程退出
+// 启动时立即跑一次，处理上次进程残留的过期 pending
+sweepExpiredPending();
 
 // 搜索路由：限流 → 去重 → 查询 → 渲染
 app.get(['/search', '/search/'], searchLimiter, repeatSearchGuard, (req, res) => {

@@ -27,7 +27,7 @@ function baseUrl() {
   return 'http://localhost:' + (process.env.PORT || '3000');
 }
 
-async function sendVerifyEmail(token, toEmail) {
+async function sendVerifyEmail(token, toEmail, username) {
   const cfg = getSmtpConfig();
   if (!cfg) return { sent: false };
 
@@ -53,7 +53,7 @@ async function sendVerifyEmail(token, toEmail) {
       from: sender,
       to: toEmail,
       subject: '验证你的博客账号',
-      text: `请点击以下链接完成邮箱验证：\n\n${link}\n\n链接 15 分钟内有效。若不是你本人操作，可忽略此邮件。`,
+      text: `你正在为账号「${username}」验证邮箱 ${toEmail}。\n\n如果不是本人操作，请忽略此邮件。\n\n请点击以下链接完成邮箱验证：\n\n${link}\n\n链接 15 分钟内有效。`,
     });
     return { sent: true };
   } catch (e) {
