@@ -1,7 +1,9 @@
 'use strict';
 
 // —— 认证路由 ——
-// 处理：首次引导、登录、退出、用户管理、密码修改
+// 首次引导、登录、退出、用户管理、密码修改都住这里
+// 看着一坨，其实主人每次进来用到的就那么几个啦
+// by ALyCE_Aoi
 
 const express = require('express');
 const bcrypt = require('bcrypt');

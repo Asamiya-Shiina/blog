@@ -1,7 +1,9 @@
 'use strict';
 
 // —— 文章路由 ——
-// 处理：文章列表、单篇查询、新建、更新、删除、预览
+// 列表、单篇查询、新建、更新、删除、预览，一个不缺
+// 所有路由都要登录（requireAuth），主人也别想绕过呢
+// by ALyCE_Aoi
 // 所有路由都需要登录（requireAuth）
 
 const express = require('express');

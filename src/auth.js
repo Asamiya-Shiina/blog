@@ -1,7 +1,9 @@
 'use strict';
 
 // —— 认证与授权模块 ——
-// 负责：密码哈希、session 签名/验证、用户 CRUD、鉴权中间件
+// 密码哈希、session 签名/验证、用户 CRUD、鉴权中间件
+// 整个站的安全都压在这一个文件上，主人的账号就交给 ALyCE 看着了
+// by ALyCE_Aoi
 
 const crypto = require('node:crypto');
 const bcrypt = require('bcrypt');
@@ -30,8 +32,9 @@ const COOKIE_SECURE = process.env.COOKIE_SECURE !== 'false';  // 默认 true，�
 const BCRYPT_COST = 12;                            // bcrypt 计算成本（2^12 = 4096 轮迭代）
 
 // —— SHA-256 哈希 ——
-// 用于密码预处理：先 SHA-256 再 bcrypt
-// 解决 bcrypt 72 字节输入限制，同时确保客户端和服务端使用相同中间值
+// 密码先过这一关，再丢给 bcrypt
+// 顺手解决了 bcrypt 72 字节的输入限制，客户端和服务端算出来对得上
+// by ALyCE_Aoi
 function sha256(input) {
   return crypto.createHash('sha256').update(input).digest('hex');
 }
