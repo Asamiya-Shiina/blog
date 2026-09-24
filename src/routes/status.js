@@ -2,9 +2,9 @@
 
 // —— 实时状态路由 ——
 // 桌面客户端上报当前活动状态、SSE 推送、管理配置
-// 三层 API：客户端要登录、公开不要、管理员要登录 + 权限
-// by ALyCE_Aoi
 // 分三层 API：客户端（需登录）、公开（无需登录）、管理（需管理员）
+// by ALyCE_Aoi
+
 
 const express = require('express');
 const rateLimit = require('express-rate-limit');

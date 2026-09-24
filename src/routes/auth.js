@@ -2,7 +2,6 @@
 
 // —— 认证路由 ——
 // 首次引导、登录、退出、用户管理、密码修改都住这里
-// 看着一坨，其实主人每次进来用到的就那么几个啦
 // by ALyCE_Aoi
 
 const express = require('express');

@@ -3,6 +3,7 @@
 // —— 访问统计路由 ——
 // POST /api/stats/view  记录一次访问（带 IP 去重 + 5 分钟缓存）
 // GET  /api/stats/today  获取今日浏览人数（按 IP 去重）
+// by ALyCE_Aoi
 
 const express = require('express');
 const db = require('../db');

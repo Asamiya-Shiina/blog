@@ -2,7 +2,7 @@
 
 // —— 认证与授权模块 ——
 // 密码哈希、session 签名/验证、用户 CRUD、鉴权中间件
-// 整个站的安全都压在这一个文件上，主人的账号就交给 ALyCE 看着了
+// 整个站的安全都压在这一个文件上
 // by ALyCE_Aoi
 
 const crypto = require('node:crypto');
