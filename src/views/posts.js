@@ -285,7 +285,7 @@ function renderFloatingUI({ withLogin = false } = {}) {
     <a href="/">首页</a>
     <a href="/search/">搜索</a>
     <a href="/status/">状态</a>
-    <a href="/#about">关于</a>
+    <a href="/board/">留言</a>
   </nav>
 
   ${withLogin ? `<a href="/login/" class="login-btn">登录</a>` : ''}
