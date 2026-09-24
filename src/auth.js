@@ -27,7 +27,7 @@ if (SECRET.length < 32) {
 
 // —— Cookie 配置 ——
 const COOKIE_NAME = 'sid';                        // session cookie 名称
-const MAX_AGE_SECONDS = 30 * 24 * 60 * 60;        // 30 天有效期
+const MAX_AGE_SECONDS = 365 * 24 * 60 * 60;       // 1 年有效期
 const COOKIE_SECURE = process.env.COOKIE_SECURE !== 'false';  // 默认 true，仅 HTTPS 传输
 const BCRYPT_COST = 12;                            // bcrypt 计算成本（2^12 = 4096 轮迭代）
 
@@ -80,13 +80,17 @@ function verify(token) {
 // httpOnly: JS 无法读取（防 XSS 窃取）
 // sameSite: lax 阻止跨站 POST 携带（防 CSRF）
 // secure: 仅 HTTPS 传输（防网络嗅探）
-function setSessionCookie(res, userId) {
+// 默认按请求 scheme 推断：HTTPS 才标记 Secure，避免本地 HTTP 开发时浏览器/requests 不回带 cookie
+// 想强制开启/关闭可设环境变量 COOKIE_SECURE=true|false
+function setSessionCookie(req, res, userId) {
   const expiresAt = Math.floor(Date.now() / 1000) + MAX_AGE_SECONDS;
   const token = sign(userId, expiresAt);
+  const envSecure = process.env.COOKIE_SECURE;
+  const secure = envSecure !== undefined ? envSecure !== 'false' : !!req.secure;
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: COOKIE_SECURE,
+    secure,
     maxAge: MAX_AGE_SECONDS * 1000,
     path: '/',
   });
@@ -103,29 +107,36 @@ const db = require('./db');
 // 根据 ID 查询用户（不返回密码哈希）
 function getUserById(id) {
   if (!Number.isFinite(id) || id <= 0) return null;
-  return db.prepare('SELECT id, username, role, created_at FROM users WHERE id = ?').get(id) || null;
+  return db.prepare(
+    'SELECT id, username, role, status, email, name, bio, avatar_filename, created_at FROM users WHERE id = ?'
+  ).get(id) || null;
 }
 
 // 根据用户名查询用户（返回密码哈希，用于登录验证）
 function getUserByUsername(username) {
   if (!username) return null;
-  return db.prepare('SELECT id, username, role, created_at, password_hash, hash_version FROM users WHERE username = ?').get(username) || null;
+  return db.prepare(
+    'SELECT id, username, role, status, email, name, bio, avatar_filename, created_at, password_hash, hash_version FROM users WHERE username = ?'
+  ).get(username) || null;
 }
 
 // 列出所有用户（管理接口使用）
 function listUsers() {
-  return db.prepare('SELECT id, username, role, created_at FROM users ORDER BY id ASC').all();
+  return db.prepare(
+    'SELECT id, username, role, status, name, email, created_at FROM users ORDER BY id ASC'
+  ).all();
 }
 
 // 创建用户
 // preHashed=true 表示 password 已经是 SHA-256 哈希值（来自前端）
 // preHashed=false 表示 password 是明文，需要先 SHA-256 再 bcrypt
-function createUser({ username, password, preHashed }) {
+// role 三档：admin（全局）/ moderator（普通管理员）/ user（普通用户）
+function createUser({ username, password, preHashed, role = 'user', email = null, status = 'active', verifyToken = null, verifyExpires = null }) {
   const hash = bcrypt.hashSync(preHashed ? password : sha256(password), BCRYPT_COST);
   const info = db.prepare(`
-    INSERT INTO users (username, password_hash, role, hash_version)
-    VALUES (?, ?, 'admin', 2)
-  `).run(username, hash);
+    INSERT INTO users (username, password_hash, role, hash_version, email, status, verify_token, verify_expires)
+    VALUES (?, ?, ?, 2, ?, ?, ?, ?)
+  `).run(username, hash, role, email, status, verifyToken, verifyExpires);
   return getUserById(info.lastInsertRowid);
 }
 
@@ -176,12 +187,25 @@ function requireAuth(req, res, next) {
   next();
 }
 
-// requireAdmin: 检查用户角色是否为 admin（必须在 requireAuth 之后使用）
+// requireAdmin: 仅全局管理员（admin）可通过
+// 内部先跑 requireAuth（避免调用方漏链导致 req.user 为空时直接放过）
 function requireAdmin(req, res, next) {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'forbidden' });
-  }
-  next();
+  requireAuth(req, res, (err) => {
+    if (err) return next(err);
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
+    next();
+  });
+}
+
+// requireManager: 后台管理者（全局 admin + 普通管理员 moderator）可通过
+function requireManager(req, res, next) {
+  requireAuth(req, res, (err) => {
+    if (err) return next(err);
+    if (req.user.role !== 'admin' && req.user.role !== 'moderator') {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    next();
+  });
 }
 
 module.exports = {
@@ -189,6 +213,7 @@ module.exports = {
   clearSessionCookie,
   requireAuth,
   requireAdmin,
+  requireManager,
   verify,
   COOKIE_NAME,
   getUserById,
