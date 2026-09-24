@@ -131,6 +131,28 @@
    */
   document.addEventListener('DOMContentLoaded', async () => {
     const user = await guard();
-    if (user) bindNav(user);
+    if (user) {
+      bindNav(user);
+      // 顶栏导航统一注入"个人主页" / "SMTP"（仅管理员）入口
+      const nav = document.querySelector('.topbar nav');
+      if (nav) {
+        const view = nav.querySelector('a[href="/"]');
+        const insertBefore = view || null;
+        const append = (a) => insertBefore ? nav.insertBefore(a, insertBefore) : nav.appendChild(a);
+
+        const profile = document.createElement('a');
+        profile.href = '/me/';
+        profile.textContent = '个人主页';
+        append(profile);
+
+        if (user.role === 'admin') {
+          const smtp = document.createElement('a');
+          smtp.href = '/managers/smtp';
+          smtp.textContent = 'SMTP';
+          if (location.pathname.startsWith('/managers/smtp')) smtp.classList.add('is-active');
+          append(smtp);
+        }
+      }
+    }
   });
 })();

@@ -303,3 +303,9 @@ tr.row:hover { background: rgba(0, 0, 0, 0.03); }
   color: var(--muted);
   padding: 40px 20px;
 }
+
+/* —— 通用提示 —— */
+.muted { color: var(--muted); }
+.msg { font-size: 14px; margin-top: 12px; min-height: 1em; }
+.msg.ok { color: #15803d; }
+.msg.bad { color: #b91c1c; }

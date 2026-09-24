@@ -19,6 +19,9 @@
   const setupView = document.getElementById('setup-view');
   const manageView = document.getElementById('manage-view');
 
+  // 角色中文名
+  const ROLE_LABEL = { admin: '全局管理员', moderator: '普通管理员', user: '普通用户' };
+
   /**
    * 页面初始化：
    *   1. 先调 guard() 试登录态
@@ -100,10 +103,15 @@
       rowsEl.innerHTML = data.items.map(u => {
         const isSelf = u.id === currentUser.id;
         const canManage = currentUser.role === 'admin';
+        const roleOptions = ['admin', 'moderator', 'user'].map(r =>
+          `<option value="${r}" ${u.role === r ? 'selected' : ''}>${ROLE_LABEL[r]}</option>`
+        ).join('');
         return `
           <tr>
             <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ' <span style="color:var(--muted);font-size:12px">（你）</span>' : ''}</td>
-            <td><span class="tag">${escapeHtml(u.role)}</span></td>
+            <td>${canManage && !isSelf
+              ? `<select class="role-select" data-id="${u.id}" data-name="${escapeHtml(u.username)}">${roleOptions}</select>`
+              : `<span class="tag">${ROLE_LABEL[u.role] || escapeHtml(u.role)}</span>`}</td>
             <td style="color:var(--muted);font-size:13px">${(u.created_at || '').replace('T', ' ').slice(0, 16)}</td>
             <td style="text-align:right;white-space:nowrap">
               <button class="btn btn-ghost" data-act="reset" data-id="${u.id}" data-name="${escapeHtml(u.username)}">重置密码</button>
@@ -115,6 +123,25 @@
       // 给所有操作按钮绑事件
       rowsEl.querySelectorAll('button[data-act]').forEach(b => {
         b.addEventListener('click', () => onRowAction(b, currentUser));
+      });
+      // 角色下拉：更改即任命/降级（仅全局管理员；不能改自己）
+      rowsEl.querySelectorAll('select.role-select').forEach(sel => {
+        sel.addEventListener('change', async () => {
+          const role = sel.value;
+          const name = sel.dataset.name;
+          if (!confirm(`把「${name}」任命为「${ROLE_LABEL[role]}」？`)) {
+            loadUsers(currentUser);
+            return;
+          }
+          try {
+            await api('PATCH', `/api/users/${sel.dataset.id}/role`, { role });
+            alert(`已把「${name}」设为「${ROLE_LABEL[role]}」`);
+            loadUsers(currentUser);
+          } catch (e) {
+            alert('修改角色失败：' + e.message);
+            loadUsers(currentUser);
+          }
+        });
       });
     } catch (e) {
       rowsEl.innerHTML = `<tr><td colspan="4" class="empty">加载失败：${escapeHtml(e.message)}</td></tr>`;

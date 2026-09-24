@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Asamiya · 邮件 SMTP</title>
+  <link rel="stylesheet" href="/managers/admin.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <a class="brand" href="/managers/">Asamiya</a>
+      <nav>
+        <a href="/managers/">概览</a>
+        <a href="/managers/posts">文章</a>
+        <a href="/managers/users">用户</a>
+        <a href="/managers/status">状态</a>
+        <a href="/managers/categories">分类</a>
+        <a href="/managers/music">音乐</a>
+        <a href="/" target="_blank" rel="noopener">查看站点 ↗</a>
+      </nav>
+      <div class="spacer"></div>
+      <span class="user" id="admin-nav-user"></span>
+      <button class="logout" id="admin-logout" type="button">退出</button>
+    </header>
+
+    <main class="container narrow">
+      <section class="card" id="smtp-card" hidden>
+        <h2>开放验证邮件（SMTP）</h2>
+        <p class="muted" id="smtp-state">加载中…</p>
+
+        <label class="field">
+          <span class="lbl">SMTP 服务器（如 smtp.qq.com）</span>
+          <input id="smtp-host" type="text" placeholder="smtp.qq.com" />
+        </label>
+        <label class="field">
+          <span class="lbl">端口（587 STARTTLS 或 465 SSL）</span>
+          <input id="smtp-port" type="number" value="465" />
+        </label>
+        <label class="field" style="display:flex;align-items:center;gap:8px">
+          <input id="smtp-secure" type="checkbox" checked />
+          <span class="lbl" style="margin:0">加密连接（SSL/TLS，端口 465 时勾选）</span>
+        </label>
+        <label class="field">
+          <span class="lbl">账号（邮箱）</span>
+          <input id="smtp-user" type="text" placeholder="you@qq.com" />
+        </label>
+        <label class="field">
+          <span class="lbl">应用专用密码（留空则沿用旧密码）</span>
+          <input id="smtp-pass" type="password" placeholder="···· ···· ···· ····" />
+        </label>
+        <label class="field">
+          <span class="lbl">发件人显示地址（留空用账号）</span>
+          <input id="smtp-sender" type="text" placeholder="you@qq.com" />
+        </label>
+        <button class="btn btn-primary" id="btn-smtp" type="button">保存 SMTP 配置</button>
+        <div class="msg" id="smtp-msg"></div>
+      </section>
+      <p id="fail" class="muted" hidden>未登录或没有权限，正在跳转…</p>
+    </main>
+  </div>
+
+  <script src="/managers/admin.js"></script>
+  <script>
+    (async function () {
+      const { api, guard, bindNav } = window.admin;
+      const $ = (id) => document.getElementById(id);
+
+      const user = await guard();
+      if (!user) return;
+      if (user.role !== 'admin') {
+        window.location.replace('/managers/');
+        return;
+      }
+      bindNav(user);
+      $('smtp-card').hidden = false;
+
+      try {
+        const cfg = await api('GET', '/api/site/smtp');
+        $('smtp-state').textContent = cfg.configured
+          ? '已配置：' + (cfg.host || '') + '（发件 ' + (cfg.sender || cfg.user || '') + '）'
+          : '未配置 SMTP —— 新用户注册将跳过邮箱验证';
+        $('smtp-host').value = cfg.host || '';
+        $('smtp-port').value = cfg.port || 587;
+        $('smtp-user').value = cfg.user || '';
+        $('smtp-sender').value = cfg.sender || '';
+        $('smtp-secure').checked = !!cfg.secure;
+      } catch {}
+
+      $('btn-smtp').addEventListener('click', async () => {
+        const msg = $('smtp-msg');
+        msg.className = 'msg'; msg.textContent = '';
+        try {
+          const cfg = await api('PUT', '/api/site/smtp', {
+            host: $('smtp-host').value.trim(),
+            port: parseInt($('smtp-port').value, 10) || 587,
+            user: $('smtp-user').value.trim(),
+            pass: $('smtp-pass').value,
+            sender: $('smtp-sender').value.trim(),
+            secure: $('smtp-secure').checked,
+          });
+          $('smtp-state').textContent = cfg.configured
+            ? '已配置，注册现在需要邮箱验证'
+            : '配置未完成（host / 账号 / 密码需齐全）';
+          $('smtp-pass').value = '';
+          msg.textContent = '已保存';
+          msg.className = 'msg ok';
+        } catch (e) {
+          msg.textContent = e.message;
+          msg.className = 'msg bad';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
