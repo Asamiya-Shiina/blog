@@ -112,6 +112,60 @@ app.use((_req, res, next) => {
 // 首次引导守卫（放在安全头之后，路由之前）
 app.use(setupGuard);
 
+// —— 通用 404 HTML ——
+// 与文末 catch-all 共用；后台守卫对未授权登录用户也返回这个，
+// 抹掉「/managers/ 存在但被拒」与「/managers/ 不存在」的差别
+const NOT_FOUND_HTML = `<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>404</title>
+<link rel="stylesheet" href="/site/site.css" />
+<style>
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+  .not-found {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    padding: 0 20px;
+  }
+  .not-found h1 {
+    font-family: Georgia, "Times New Roman", "Songti SC", serif;
+    font-weight: 400;
+    font-size: 56px;
+    line-height: 1.2;
+    margin: 0 0 24px;
+  }
+  .not-found p {
+    color: var(--muted);
+    font-size: 18px;
+    margin: 0 0 32px;
+  }
+  .not-found a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+  }
+  .not-found a:hover { border-bottom-color: var(--accent); }
+  @media (max-width: 560px) {
+    .not-found h1 { font-size: 42px; }
+  }
+</style>
+</head>
+<body>
+  <div class="not-found">
+    <h1>Oops! 该页面不存在</h1>
+    <p>Not Found: 404...</p>
+    <a href="/">← 回到首页</a>
+  </div>
+</body></html>`;
+
 // —— 后台页面鉴权 ——
 // /managers/* 下的所有 HTML 页面需要后台管理者（admin/moderator）登录
 // 其中 /managers/users（用户与角色管理）仅全局管理员（admin）可进
@@ -121,23 +175,13 @@ function requireAdminPage(req, res, next) {
   const session = verify(token);
   if (session) {
     const row = db.prepare('SELECT role, tokens_valid_after FROM users WHERE id = ?').get(session.userId);
-    if (row && session.iat >= (row.tokens_valid_after || 0)) {
-      const isManager = row.role === 'admin' || row.role === 'moderator';
-      const isGlobal = row.role === 'admin';
-      // req.path 已被挂载前缀剥掉，例如 /managers/users/ → /users/
-      // 严格匹配：必须是 /users（可带 /xxx）才视为用户管理区，
-      // 避免 /managers/usersfoo 或 /managers/users-old 之类的旁路
-      const path = req.path;
-      const usersArea = path === '/users' || path.startsWith('/users/');
-      const smtpArea  = path === '/smtp'  || path.startsWith('/smtp/');
-      // 仅全局管理员才能进 /users 与 /smtp，其余后台区域 admin/moderator 都可
-      const restricted = (usersArea || smtpArea) && !isGlobal;
-      if (isManager && !restricted) return next();
+    if (row && session.iat >= (row.tokens_valid_after || 0) && row.role === 'admin') {
+      return next();
     }
   }
-  // 仅放行明确的静态资源扩展名，避免 /managers/secret.txt 等绕过认证
-  if (/\.(?:css|js|png|jpe?g|gif|svg|ico|woff2?|ttf|eot|map)$/i.test(req.path)) return next();
-  return res.redirect('/login/');
+  // 其他一律 404（匿名 / 普通用户 / moderator / session 无效 全抹掉入口）
+  // 静态资源扩展名也不再放行，避免匿名直接拉 /managers/*.css 摸后台结构
+  return res.status(404).type('html').send(NOT_FOUND_HTML);
 }
 app.use('/managers/', requireAdminPage);
 
@@ -409,56 +453,7 @@ app.use('/managers/smtp', express.static(path.join(__dirname, 'public', 'manager
 
 // —— 兜底 404（所有路由未匹配时） ——
 app.use((_req, res) => {
-  res.status(404).type('html').send(`<!DOCTYPE html>
-<html lang="zh-CN"><head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>404</title>
-<link rel="stylesheet" href="/site/site.css" />
-<style>
-  body {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    overflow: hidden;
-  }
-  .not-found {
-    position: relative;
-    z-index: 1;
-    text-align: center;
-    padding: 0 20px;
-  }
-  .not-found h1 {
-    font-family: Georgia, "Times New Roman", "Songti SC", serif;
-    font-weight: 400;
-    font-size: 56px;
-    line-height: 1.2;
-    margin: 0 0 24px;
-  }
-  .not-found p {
-    color: var(--muted);
-    font-size: 18px;
-    margin: 0 0 32px;
-  }
-  .not-found a {
-    color: var(--accent);
-    text-decoration: none;
-    border-bottom: 1px solid rgba(59, 130, 246, 0.3);
-  }
-  .not-found a:hover { border-bottom-color: var(--accent); }
-  @media (max-width: 560px) {
-    .not-found h1 { font-size: 42px; }
-  }
-</style>
-</head>
-<body>
-  <div class="not-found">
-    <h1>Oops! 该页面不存在</h1>
-    <p>Not Found: 404...</p>
-    <a href="/">← 回到首页</a>
-  </div>
-</body></html>`);
+  res.status(404).type('html').send(NOT_FOUND_HTML);
 });
 
 // —— 全局错误处理 ——
