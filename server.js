@@ -39,7 +39,7 @@ const { verify, COOKIE_NAME } = require('./src/auth');
 // 音乐上传目录：与 src/routes/music.js 保持一致
 const MUSIC_DIR = path.join(__dirname, 'data', 'uploads', 'music');
 fs.mkdirSync(MUSIC_DIR, { recursive: true });
-const { renderListPage, renderPostPage, renderSearchPage, renderNoticePage } = require('./src/views/posts');
+const { renderListPage, renderPostPage, renderSearchPage, renderNoticePage, renderCategoryPage } = require('./src/views/posts');
 const { renderStatusPage } = require('./src/views/status-page');
 
 const app = express();
@@ -111,29 +111,86 @@ app.use('/api/posts', postsRoutes);     // 文章 CRUD
 app.use('/api/music', musicRoutes);     // 音乐管理（公开的 /active + 管理接口）
 app.use('/api/data', require('./src/routes/status'));  // 实时状态上报与查询
 app.use('/api/stats', require('./src/routes/stats'));    // 访问统计
+app.use('/api/categories', require('./src/routes/categories'));  // 分类管理（列表/新建/重命名/删除）
 
 // —— 公开文章页（无需登录） ——
+
+// 给一组文章行附加分类 [{id,name}]，返回带 categories 的新数组
+// 用一次 IN 查询拉回，避免 N+1
+function withCategories(rows) {
+  if (!rows || rows.length === 0) return rows || [];
+  const ids = rows.map(r => r.id);
+  const maps = db.prepare(`
+    SELECT pc.post_id, c.id, c.name
+    FROM post_categories pc
+    JOIN categories c ON c.id = pc.category_id
+    WHERE pc.post_id IN (${ids.map(() => '?').join(',')})
+    ORDER BY c.name
+  `).all(...ids);
+  const map = new Map();
+  for (const m of maps) {
+    if (!map.has(m.post_id)) map.set(m.post_id, []);
+    map.get(m.post_id).push({ id: m.id, name: m.name });
+  }
+  return rows.map(r => ({ ...r, categories: map.get(r.id) || [] }));
+}
+
+// 列出至少含一篇已发布文章的分类（供前台筛选条展示，附已发布文章数）
+function getPublicCategories() {
+  return db.prepare(`
+    SELECT c.id, c.name,
+      (SELECT COUNT(*)
+       FROM post_categories pc JOIN posts p ON p.id = pc.post_id
+       WHERE pc.category_id = c.id AND p.status = 'published') AS post_count
+    FROM categories c
+    WHERE EXISTS (
+      SELECT 1 FROM post_categories pc JOIN posts p ON p.id = pc.post_id
+      WHERE pc.category_id = c.id AND p.status = 'published'
+    )
+    ORDER BY c.name
+  `).all();
+}
 
 // 文章列表页：只展示已发布文章，按更新时间倒序
 app.get(['/posts', '/posts/'], (_req, res) => {
   const rows = db.prepare(`
-    SELECT slug, title, excerpt, updated_at, created_at
+    SELECT id, slug, title, excerpt, updated_at, created_at
     FROM posts
     WHERE status = 'published'
     ORDER BY COALESCE(updated_at, created_at) DESC
   `).all();
-  res.type('html').send(renderListPage(rows.map(r => ({ ...r, published_at: r.updated_at }))));
+  const posts = withCategories(rows).map(r => ({ ...r, published_at: r.updated_at }));
+  res.type('html').send(renderListPage(posts, { categories: getPublicCategories() }));
+});
+
+// 分类归档页：某分类下的已发布文章，含分类筛选条
+app.get(['/category/:id', '/category/:id/'], (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const category = Number.isInteger(id)
+    ? db.prepare('SELECT id, name FROM categories WHERE id = ?').get(id)
+    : null;
+  if (!category) return res.status(404).type('html').send(notFoundPage(req.params.id));
+  const rows = db.prepare(`
+    SELECT id, slug, title, excerpt, updated_at, created_at
+    FROM posts
+    WHERE status = 'published'
+      AND id IN (SELECT post_id FROM post_categories WHERE category_id = ?)
+    ORDER BY COALESCE(updated_at, created_at) DESC
+  `).all(id);
+  const posts = withCategories(rows).map(r => ({ ...r, published_at: r.updated_at }));
+  res.type('html').send(renderCategoryPage(category, posts, getPublicCategories()));
 });
 
 // 文章详情页：通过 slug 查找已发布文章，不存在返回 404
 app.get(['/posts/:slug', '/posts/:slug/'], (req, res) => {
   const slug = req.params.slug;
-  const post = db.prepare(`
-    SELECT slug, title, excerpt, content_md, created_at, updated_at
+  const row = db.prepare(`
+    SELECT id, slug, title, excerpt, content_md, created_at, updated_at
     FROM posts
     WHERE slug = ? AND status = 'published'
   `).get(slug);
-  if (!post) return res.status(404).type('html').send(notFoundPage(slug));
+  if (!row) return res.status(404).type('html').send(notFoundPage(slug));
+  const post = withCategories([row])[0];
   res.type('html').send(renderPostPage({ ...post, published_at: post.updated_at }));
 });
 
@@ -208,7 +265,7 @@ app.get(['/search', '/search/'], searchLimiter, repeatSearchGuard, (req, res) =>
     // 转义 LIKE 通配符（\、%、_），防止注入
     const like = '%' + q.replace(/[\\%_]/g, ch => '\\' + ch) + '%';
     rows = db.prepare(`
-      SELECT slug, title, excerpt, updated_at, created_at
+      SELECT id, slug, title, excerpt, updated_at, created_at
       FROM posts
       WHERE status = 'published'
         AND (title LIKE ? ESCAPE '\\' OR excerpt LIKE ? ESCAPE '\\' OR content_md LIKE ? ESCAPE '\\')
@@ -216,7 +273,8 @@ app.get(['/search', '/search/'], searchLimiter, repeatSearchGuard, (req, res) =>
       LIMIT 50
     `).all(like, like, like);
   }
-  res.type('html').send(renderSearchPage(q, rows.map(r => ({ ...r, published_at: r.updated_at }))));
+  const results = withCategories(rows).map(r => ({ ...r, published_at: r.updated_at }));
+  res.type('html').send(renderSearchPage(q, results));
 });
 
 // —— 实时状态页（无需登录） ——

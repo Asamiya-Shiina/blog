@@ -77,6 +77,42 @@ const SHARED_HEAD = `
       font-variant-numeric: tabular-nums;
     }
     .post-card p { color: var(--muted); margin: 0; }
+
+    /* —— 分类标签 & 筛选条 —— */
+    .post-cats { margin-left: 10px; }
+    .cat-tag {
+      display: inline-block;
+      padding: 2px 10px;
+      margin-right: 6px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--muted);
+      background: rgba(0,0,0,0.04);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      text-decoration: none;
+      transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+    }
+    .cat-tag:hover { color: var(--fg); border-color: var(--accent); }
+    .cat-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 40px;
+      animation: fadeUp 0.7s 0.1s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    }
+    .cat-filter {
+      padding: 6px 14px;
+      font-size: 13px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.6);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      text-decoration: none;
+      transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+    }
+    .cat-filter:hover { color: var(--fg); border-color: var(--accent); }
+    .cat-filter.is-active { color: #fff; background: var(--accent); border-color: var(--accent); }
     .empty {
       text-align: center;
       color: var(--muted);
@@ -226,38 +262,76 @@ function renderSearchButton() {
   </a>`;
 }
 
-// 渲染文章列表页：卡片式布局，带入场动画
-function renderListPage(posts) {
-  const cards = posts.length === 0
-    ? `<div class="empty">还没有发布的文章。</div>`
-    : posts.map(p => `
+// 分类标签片段：可点击跳转到对应分类归档页；无分类则返回空串
+function categoryTags(list = []) {
+  if (!list || list.length === 0) return '';
+  return '<span class="post-cats">' +
+    list.map(c => `<a class="cat-tag" href="/category/${c.id}/">${escapeHtml(c.name)}</a>`).join('') +
+    '</span>';
+}
+
+// 分类筛选条：渲染「全部 / 各分类」的胶囊导航，activeId 高亮当前分类
+function categoryStrip(categories = [], activeId = null) {
+  if (!categories || categories.length === 0) return '';
+  // 首项为「全部」→ /posts/，其余指向各分类归档页
+  const items = [{ id: null, name: '全部' }, ...categories];
+  const link = items.map(c =>
+    `<a class="cat-filter${activeId === c.id ? ' is-active' : ''}" href="${c.id === null ? '/posts/' : '/category/' + c.id + '/'}">${escapeHtml(c.name)}</a>`
+  ).join('');
+  return `<div class="cat-strip">${link}</div>`;
+}
+
+// 单篇文章卡片（列表页 / 搜索页 / 分类页共用），meta 旁带分类标签
+function renderCard(p) {
+  return `
         <article class="post-card">
           <h2><a href="/posts/${encodeURIComponent(p.slug)}/">${escapeHtml(p.title)}</a></h2>
-          <div class="meta">${escapeHtml(formatDate(p.published_at || p.updated_at))}</div>
+          <div class="meta">${escapeHtml(formatDate(p.published_at || p.updated_at))}${categoryTags(p.categories)}</div>
           ${p.excerpt ? `<p>${escapeHtml(p.excerpt)}</p>` : ''}
-        </article>
-      `).join('');
+        </article>`;
+}
+
+// 渲染文章列表页：卡片式布局，带入场动画
+// opts: { title, heading, subheading, categories, activeCategory }
+function renderListPage(posts, opts = {}) {
+  const { title = '文章', heading, subheading, categories = [], activeCategory = null } = opts;
+  const cards = posts.length === 0
+    ? `<div class="empty">还没有发布的文章。</div>`
+    : posts.map(renderCard).join('');
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>文章</title>
+  <title>${escapeHtml(title)}</title>
   ${SHARED_HEAD}
 </head>
 <body>
   <main class="wrap">
     <header class="hero">
-      <h1>文章</h1>
-      <p>这里收录了我写过的所有已发布文章。</p>
+      <h1>${escapeHtml(heading || '文章')}</h1>
+      <p>${escapeHtml(subheading || '这里收录了我写过的所有已发布文章。')}</p>
     </header>
+    ${categoryStrip(categories, activeCategory)}
     <section>${cards}</section>
   </main>
   ${renderSearchButton()}
   ${renderFloatingUI()}
 </body>
 </html>`;
+}
+
+// 渲染分类归档页：某分类下的已发布文章，含分类筛选条
+function renderCategoryPage(category, posts, categories) {
+  const name = category ? category.name : '分类';
+  return renderListPage(posts, {
+    title: name,
+    heading: name,
+    subheading: `属于「${name}」分类的文章。`,
+    categories,
+    activeCategory: category ? category.id : null,
+  });
 }
 
 // 渲染文章详情页：标题、日期、摘要、Markdown 正文
@@ -280,7 +354,7 @@ function renderPostPage(post) {
           <h1>${escapeHtml(post.title)}</h1>
           ${post.excerpt ? `<p class="excerpt">${escapeHtml(post.excerpt)}</p>` : ''}
         </div>
-        <div class="meta">${escapeHtml(formatDate(post.published_at || post.updated_at))}</div>
+        <div class="meta">${escapeHtml(formatDate(post.published_at || post.updated_at))}${categoryTags(post.categories)}</div>
       </header>
       <div class="post-content">${html}</div>
     </article>
@@ -300,13 +374,7 @@ function renderSearchPage(q, posts) {
   } else if (posts.length === 0) {
     body = `<div class="empty">没有找到匹配 “${escapeHtml(query)}” 的文章。<br /><a href="/posts/">← 浏览全部文章</a></div>`;
   } else {
-    body = posts.map(p => `
-        <article class="post-card">
-          <h2><a href="/posts/${encodeURIComponent(p.slug)}/">${escapeHtml(p.title)}</a></h2>
-          <div class="meta">${escapeHtml(formatDate(p.published_at || p.updated_at))}</div>
-          ${p.excerpt ? `<p>${escapeHtml(p.excerpt)}</p>` : ''}
-        </article>
-      `).join('');
+    body = posts.map(renderCard).join('');
   }
 
   const count = query ? `<p>共找到 ${posts.length} 篇文章。</p>` : `<p>在已发布的文章中查找。</p>`;
@@ -428,4 +496,4 @@ function renderNoticePage({ title, heading, message, link = '/posts/', linkText 
 </html>`;
 }
 
-module.exports = { renderListPage, renderPostPage, renderSearchPage, renderNoticePage, renderFloatingUI, SHARED_HEAD };
+module.exports = { renderListPage, renderPostPage, renderSearchPage, renderNoticePage, renderCategoryPage, renderFloatingUI, SHARED_HEAD };

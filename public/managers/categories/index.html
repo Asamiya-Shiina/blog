@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Asamiya · 分类</title>
+  <link rel="stylesheet" href="/managers/admin.css" />
+</head>
+<body>
+  <div class="page">
+
+    <header class="topbar">
+      <a class="brand" href="/managers/">Asamiya</a>
+      <nav>
+        <a href="/managers/">概览</a>
+        <a href="/managers/posts">文章</a>
+        <a href="/managers/users">用户</a>
+        <a href="/managers/status">状态</a>
+        <a href="/managers/categories" class="is-active">分类</a>
+        <a href="/managers/music">音乐</a>
+        <a href="/" target="_blank" rel="noopener">查看站点 ↗</a>
+      </nav>
+      <div class="spacer"></div>
+      <span class="user" id="admin-nav-user"></span>
+      <button class="logout" id="admin-logout" type="button">退出</button>
+    </header>
+
+    <main class="container">
+
+      <div id="notice" class="notice"></div>
+
+      <div class="card" style="display:flex;gap:10px;align-items:center">
+        <input type="text" id="name" placeholder="新分类名…" maxlength="50" style="max-width:300px" />
+        <button class="btn btn-primary" id="add" type="button">+ 新增分类</button>
+      </div>
+
+      <div class="card" style="padding:0;margin-top:16px">
+        <table>
+          <thead>
+            <tr>
+              <th>分类名</th>
+              <th style="width:15%">文章数</th>
+              <th style="width:15%">创建时间</th>
+              <th style="width:20%;text-align:right">操作</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <tr><td colspan="4" class="empty">加载中…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </main>
+
+  </div>
+
+  <script src="/managers/admin.js"></script>
+  <script>
+    (() => {
+      const { api, escapeHtml } = window.admin;
+      const rowsEl = document.getElementById('rows');
+      const nameEl = document.getElementById('name');
+      const noticeEl = document.getElementById('notice');
+
+      function showNotice(type, msg) {
+        noticeEl.className = 'notice ' + type + ' is-visible';
+        noticeEl.textContent = msg;
+      }
+
+      // 渲染分类列表：名称、文章数、操作（重命名/删除）
+      function render(list) {
+        rowsEl.innerHTML = list.map(c => `
+          <tr class="row">
+            <td><strong>${escapeHtml(c.name)}</strong></td>
+            <td style="color:var(--muted);font-size:13px">${c.post_count ?? 0}</td>
+            <td style="color:var(--muted);font-size:13px">${(c.created_at || '').replace('T', ' ').slice(0, 16)}</td>
+            <td style="text-align:right">
+              <button class="btn btn-ghost" data-act="rename" data-id="${c.id}" data-name="${escapeHtml(c.name)}">重命名</button>
+              <button class="btn btn-danger" data-act="del" data-id="${c.id}" data-name="${escapeHtml(c.name)}">删除</button>
+            </td>
+          </tr>
+        `).join('');
+        // 事件委托：给行内按钮绑定操作
+        rowsEl.querySelectorAll('button[data-act]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            const oldName = btn.dataset.name;
+            if (btn.dataset.act === 'rename') {
+              const next = prompt('新的分类名：', oldName);
+              if (next === null) return;
+              try {
+                await api('PUT', '/api/categories/' + id, { name: next.trim() });
+                showNotice('success', '✓ 已重命名');
+                load();
+              } catch (err) {
+                showNotice('error', '重命名失败：' + (err.data?.error || err.message));
+              }
+            } else {
+              if (!confirm(`确定删除分类「${oldName}」？文章不会被删除，只会移除该分类。`)) return;
+              try {
+                await api('DELETE', '/api/categories/' + id);
+                showNotice('success', '✓ 已删除');
+                load();
+              } catch (err) {
+                showNotice('error', '删除失败：' + err.message);
+              }
+            }
+          });
+        });
+      }
+
+      async function load() {
+        rowsEl.innerHTML = '<tr><td colspan="4" class="empty">加载中…</td></tr>';
+        try {
+          const data = await api('GET', '/api/categories');
+          if (!data.items || !data.items.length) {
+            rowsEl.innerHTML = '<tr><td colspan="4" class="empty">还没有分类。在左上输入框添加一个 →</td></tr>';
+          } else {
+            render(data.items);
+          }
+        } catch (err) {
+          rowsEl.innerHTML = '<tr><td colspan="4" class="empty">加载失败：' + escapeHtml(err.message) + '</td></tr>';
+        }
+      }
+
+      document.getElementById('add').addEventListener('click', async () => {
+        const name = nameEl.value.trim();
+        if (!name) { showNotice('error', '请输入分类名'); return; }
+        try {
+          const created = await api('POST', '/api/categories', { name });
+          nameEl.value = '';
+          showNotice('success', '✓ 已新增分类');
+          load();
+        } catch (err) {
+          showNotice('error', '新增失败：' + (err.data?.error || err.message));
+        }
+      });
+      nameEl.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('add').click(); });
+
+      load();
+    })();
+  </script>
+</body>
+</html>

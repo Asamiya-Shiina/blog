@@ -16,6 +16,7 @@
         <a href="/managers/posts" class="is-active">文章</a>
         <a href="/managers/users">用户</a>
         <a href="/managers/status">状态</a>
+        <a href="/managers/categories">分类</a>
         <a href="/managers/music">音乐</a>
         <a href="/" target="_blank" rel="noopener">查看站点 ↗</a>
       </nav>
@@ -33,6 +34,9 @@
           <option value="published">已发布</option>
           <option value="draft">草稿</option>
         </select>
+        <select id="category" style="max-width:160px">
+          <option value="">全部分类</option>
+        </select>
         <button class="btn btn-ghost" id="search-btn" type="button">搜索</button>
         <div class="spacer" style="flex:1"></div>
         <a class="btn btn-primary" href="/managers/editor">+ 新建文章</a>
@@ -42,14 +46,15 @@
         <table>
           <thead>
             <tr>
-              <th style="width:50%">标题</th>
-              <th style="width:12%">状态</th>
-              <th style="width:18%">更新时间</th>
-              <th style="width:20%;text-align:right">操作</th>
+              <th>标题</th>
+              <th style="width:11%">状态</th>
+              <th style="width:16%">分类</th>
+              <th style="width:16%">更新时间</th>
+              <th style="width:15%;text-align:right">操作</th>
             </tr>
           </thead>
           <tbody id="rows">
-            <tr><td colspan="4" class="empty">加载中…</td></tr>
+            <tr><td colspan="5" class="empty">加载中…</td></tr>
           </tbody>
         </table>
       </div>
@@ -71,12 +76,22 @@
       const { api, escapeHtml } = window.admin;
       const rowsEl   = document.getElementById('rows');
       const qEl      = document.getElementById('q');        // 搜索关键字输入框
-      const statusEl = document.getElementById('status');   // 状态筛选下拉（全部/已发布/草稿）
-      const prevBtn  = document.getElementById('prev');
-      const nextBtn  = document.getElementById('next');
-      const pageInfo = document.getElementById('page-info');
+      const statusEl   = document.getElementById('status');   // 状态筛选下拉（全部/已发布/草稿）
+      const categoryEl = document.getElementById('category');  // 分类筛选下拉（全部/各分类）
+      const prevBtn    = document.getElementById('prev');
+      const nextBtn    = document.getElementById('next');
+      const pageInfo   = document.getElementById('page-info');
 
       let page = 1;   // 当前页码，翻页/筛选时更新
+
+      // 加载分类列表填充筛选下拉（保留「全部分类」这一空选项）
+      (async () => {
+        try {
+          const data = await api('GET', '/api/categories');
+          const opts = (data.items || []).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+          categoryEl.insertAdjacentHTML('beforeend', opts);
+        } catch { /* 拉取失败则仅保留「全部分类」，不影响其它功能 */ }
+      })();
 
       // 拉取并渲染一页文章
       async function load() {
@@ -86,17 +101,20 @@
         if (q) params.set('q', q);
         const st = statusEl.value;
         if (st) params.set('status', st);
+        const cat = categoryEl.value;
+        if (cat) params.set('category_id', cat);
 
-        rowsEl.innerHTML = '<tr><td colspan="4" class="empty">加载中…</td></tr>';
+        rowsEl.innerHTML = '<tr><td colspan="5" class="empty">加载中…</td></tr>';
         try {
           const data = await api('GET', '/api/posts?' + params);
           if (!data.items.length) {
-            rowsEl.innerHTML = '<tr><td colspan="4" class="empty">没有文章。<a href="/managers/editor">写一篇 →</a></td></tr>';
+            rowsEl.innerHTML = '<tr><td colspan="5" class="empty">没有文章。<a href="/managers/editor">写一篇 →</a></td></tr>';
           } else {
             rowsEl.innerHTML = data.items.map(p => `
               <tr class="row" onclick="window.location.href='/managers/editor?id=${p.id}'">
                 <td><strong>${escapeHtml(p.title)}</strong>${p.excerpt ? `<div style="color:var(--muted);font-size:12px;margin-top:2px">${escapeHtml(p.excerpt)}</div>` : ''}</td>
                 <td><span class="tag ${p.status === 'published' ? 'tag-published' : 'tag-draft'}">${p.status === 'published' ? '已发布' : '草稿'}</span></td>
+                <td>${(p.categories || []).map(c => `<span class="tag">${escapeHtml(c.name)}</span>`).join(' ') || '<span style="color:var(--muted);font-size:12px">—</span>'}</td>
                 <td style="color:var(--muted);font-size:13px">${(p.updated_at || '').replace('T', ' ').slice(0, 16)}</td>
                 <td style="text-align:right">
                   <button class="btn btn-ghost" onclick="event.stopPropagation(); window.location.href='/managers/editor?id=${p.id}'">编辑</button>
@@ -126,7 +144,7 @@
           prevBtn.disabled = page <= 1;
           nextBtn.disabled = page >= totalPages;
         } catch (err) {
-          rowsEl.innerHTML = `<tr><td colspan="4" class="empty">加载失败：${escapeHtml(err.message)}</td></tr>`;
+          rowsEl.innerHTML = `<tr><td colspan="5" class="empty">加载失败：${escapeHtml(err.message)}</td></tr>`;
         }
       }
 
@@ -134,6 +152,7 @@
       document.getElementById('search-btn').addEventListener('click', () => { page = 1; load(); });
       qEl.addEventListener('keydown', e => { if (e.key === 'Enter') { page = 1; load(); } });
       statusEl.addEventListener('change', () => { page = 1; load(); });
+      categoryEl.addEventListener('change', () => { page = 1; load(); });
       prevBtn.addEventListener('click', () => { page--; load(); });
       nextBtn.addEventListener('click', () => { page++; load(); });
 

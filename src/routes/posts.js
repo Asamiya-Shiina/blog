@@ -11,6 +11,7 @@ const { z } = require('zod');
 
 const db = require('../db');
 const { requireAuth } = require('../auth');
+const { getPostCategories } = require('./categories');
 
 const router = express.Router();
 
@@ -50,6 +51,33 @@ function uniqueSlug(base, excludeId) {
   }
 }
 
+// 全部替换某文章的分类关联（传空数组即清空分类）
+function setPostCategories(postId, categoryIds) {
+  db.prepare('DELETE FROM post_categories WHERE post_id = ?').run(postId);
+  const ins = db.prepare('INSERT INTO post_categories (post_id, category_id) VALUES (?, ?)');
+  for (const id of categoryIds || []) ins.run(postId, id);
+}
+
+// 一次拉回多条文章的分类映射：{ postId: [{id,name}, ...] }
+// 用 LEFT JOIN 一次查完，避免列表 N+1
+function categoriesForPosts(postIds) {
+  const ids = [...new Set(postIds.filter(Number.isInteger))];
+  if (ids.length === 0) return new Map();
+  const rows = db.prepare(`
+    SELECT pc.post_id, c.id, c.name
+    FROM post_categories pc
+    JOIN categories c ON c.id = pc.category_id
+    WHERE pc.post_id IN (${ids.map(() => '?').join(',')})
+    ORDER BY c.name
+  `).all(...ids);
+  const map = new Map();
+  for (const r of rows) {
+    if (!map.has(r.post_id)) map.set(r.post_id, []);
+    map.get(r.post_id).push({ id: r.id, name: r.name });
+  }
+  return map;
+}
+
 // 数据库行 → 文章对象
 // withHtml=true 时额外渲染 content_html（用于编辑器预览）
 function rowToPost(row, { withHtml = false } = {}) {
@@ -61,6 +89,7 @@ function rowToPost(row, { withHtml = false } = {}) {
     excerpt: row.excerpt || '',
     content_md: row.content_md,
     status: row.status,
+    categories: getPostCategories(row.id),
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -77,6 +106,7 @@ const postSchema = z.object({
   excerpt: z.string().max(500).optional().nullable(),
   content_md: z.string().min(1).max(200_000),    // 内容上限 200KB
   status: z.enum(['draft', 'published']).optional(),
+  category_ids: z.array(z.number().int().positive()).optional(),
 });
 
 // 更新文章：所有字段可选（partial）
@@ -87,6 +117,7 @@ const patchSchema = postSchema.partial();
 router.get('/', requireAuth, (req, res) => {
   const status = typeof req.query.status === 'string' ? req.query.status : null;
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  const category_id = parseInt(req.query.category_id, 10);
   const page = Math.max(1, parseInt(req.query.page || '1', 10) || 1);
   const pageSize = 20;
 
@@ -96,6 +127,10 @@ router.get('/', requireAuth, (req, res) => {
   if (status === 'draft' || status === 'published') {
     where.push('status = ?');
     params.push(status);
+  }
+  if (Number.isInteger(category_id)) {
+    where.push('EXISTS (SELECT 1 FROM post_categories pc WHERE pc.post_id = posts.id AND pc.category_id = ?)');
+    params.push(category_id);
   }
   if (q) {
     where.push('(title LIKE ? OR excerpt LIKE ? OR content_md LIKE ?)');
@@ -115,11 +150,15 @@ router.get('/', requireAuth, (req, res) => {
     LIMIT ? OFFSET ?
   `).all(...params, pageSize, (page - 1) * pageSize);
 
+  // 一次拉回本页所有文章的分类，按 post_id 聚合成映射
+  const catMap = categoriesForPosts(rows.map(r => r.id));
+
   res.json({
     items: rows.map(r => ({
       id: r.id, slug: r.slug, title: r.title,
       excerpt: r.excerpt || '',
       status: r.status,
+      categories: catMap.get(r.id) || [],
       created_at: r.created_at,
       updated_at: r.updated_at,
     })),
@@ -155,7 +194,7 @@ router.post('/', requireAuth, (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid' });
   }
-  const { title, slug, excerpt, content_md, status } = parsed.data;
+  const { title, slug, excerpt, content_md, status, category_ids } = parsed.data;
   // slug 优先使用手动指定值，否则从标题生成
   const baseSlug = slug ? slugify(slug) : slugify(title);
   const finalSlug = uniqueSlug(baseSlug);
@@ -164,6 +203,9 @@ router.post('/', requireAuth, (req, res) => {
     INSERT INTO posts (slug, title, excerpt, content_md, status)
     VALUES (?, ?, ?, ?, ?)
   `).run(finalSlug, title, excerpt || null, content_md, status || 'draft');
+
+  // 挂分类关联
+  setPostCategories(info.lastInsertRowid, category_ids);
 
   const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(info.lastInsertRowid);
   res.status(201).json(rowToPost(row, { withHtml: true }));
@@ -203,6 +245,9 @@ router.put('/:id', requireAuth, (req, res) => {
     SET title = ?, slug = ?, excerpt = ?, content_md = ?, status = ?, updated_at = datetime('now', '+8 hours')
     WHERE id = ?
   `).run(next.title, nextSlug, next.excerpt, next.content_md, next.status, id);
+
+  // 分类：提交了 category_ids 才替换，未提交则保持原状
+  if (patch.category_ids !== undefined) setPostCategories(id, patch.category_ids);
 
   const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(id);
   res.json(rowToPost(row, { withHtml: true }));

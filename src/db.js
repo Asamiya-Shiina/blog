@@ -77,6 +77,24 @@ db.exec(`
   -- 初始化单行
   INSERT OR IGNORE INTO music_settings (id, active_id) VALUES (1, NULL);
 
+  -- 分类表：后台维护的分类名（article categorization）
+  CREATE TABLE IF NOT EXISTS categories (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL UNIQUE,                -- 分类名
+    created_at  TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+  );
+
+  -- 文章分类关联表：一篇文章可关联多个分类（多对多）
+  -- 删除文章/分类时自动清理关联记录（外键 CASCADE）
+  CREATE TABLE IF NOT EXISTS post_categories (
+    post_id     INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+    PRIMARY KEY (post_id, category_id)
+  );
+  -- 按分类索引，加速按分类筛选文章
+  CREATE INDEX IF NOT EXISTS idx_post_categories_cat
+    ON post_categories(category_id);
+
   -- 页面访问记录：用于统计今日浏览人数
   -- 每页包含路径、访客 IP、访问时间
   CREATE TABLE IF NOT EXISTS page_views (
