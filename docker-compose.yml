@@ -6,7 +6,11 @@ services:
     ports:
       - "3000:3000"
     environment:
+      - NODE_ENV=production
       - COOKIE_SECURE=false
+      # 首次引导需要 token；首次创建管理员账号前先在 .env 设一个强随机串
+      # 创建第一个管理员后这个变量可移除（路由只会在 db.userCount()===0 时校验）
+      - SETUP_TOKEN=${SETUP_TOKEN:?set SETUP_TOKEN in .env before first boot}
     volumes:
       - ./data:/app/data
     deploy:

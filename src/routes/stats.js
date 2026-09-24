@@ -32,8 +32,12 @@ function shouldRecord(ip, path) {
 
 // POST /api/stats/view
 // body: { path }（可选，默认 '/'）
+// 限长 200 字符 + 必须以 / 开头，防止攻击者塞超长字符串进 page_views 把 SQLite 撑爆
 router.post('/view', (req, res) => {
-  const path = (req.body && req.body.path) || '/';
+  const raw = req.body && req.body.path;
+  const path = (typeof raw === 'string' && raw.length <= 200 && raw.startsWith('/'))
+    ? raw
+    : '/';
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (shouldRecord(ip, path)) {
     db.prepare('INSERT INTO page_views (path, ip) VALUES (?, ?)').run(path, ip);

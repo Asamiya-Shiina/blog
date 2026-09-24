@@ -40,10 +40,11 @@ function sha256(input) {
 }
 
 // —— Session Token 签名 ——
-// 格式：userId.expiresAt.hmac
-// 使用 HMAC-SHA256 对 userId + 过期时间签名，防篡改
-function sign(userId, expiresAt) {
-  const payload = `${userId}.${expiresAt}`;
+// 格式：userId.iat.expiresAt.mac
+// 包含 iat（签发时间，秒）让服务端能在改密码时按 iat 阈值作废旧 token
+// 使用 HMAC-SHA256 对 userId + iat + expiresAt 签名，防篡改
+function sign(userId, iat, expiresAt) {
+  const payload = `${userId}.${iat}.${expiresAt}`;
   const mac = crypto.createHmac('sha256', SECRET).update(payload).digest('hex');
   return `${payload}.${mac}`;
 }
@@ -53,9 +54,9 @@ function sign(userId, expiresAt) {
 function verify(token) {
   if (!token || typeof token !== 'string') return null;
   const parts = token.split('.');
-  if (parts.length !== 3) return null;
-  const [userId, expiresAt, mac] = parts;
-  const payload = `${userId}.${expiresAt}`;
+  if (parts.length !== 4) return null;
+  const [userId, iat, expiresAt, mac] = parts;
+  const payload = `${userId}.${iat}.${expiresAt}`;
   const expected = crypto.createHmac('sha256', SECRET).update(payload).digest('hex');
   // 长度不一致直接拒绝，避免后续 Buffer 比较出错
   if (mac.length !== expected.length) return null;
@@ -67,12 +68,13 @@ function verify(token) {
   // 恒定时间比较：防止通过响应时间推断 MAC 是否接近正确值
   if (!crypto.timingSafeEqual(macBuf, expBuf)) return null;
   const expNum = Number(expiresAt);
+  const iatNum = Number(iat);
   const userIdNum = Number(userId);
-  if (!Number.isFinite(expNum) || !Number.isFinite(userIdNum)) return null;
+  if (!Number.isFinite(expNum) || !Number.isFinite(iatNum) || !Number.isFinite(userIdNum)) return null;
   // 检查 token 是否已过期
   if (expNum <= Math.floor(Date.now() / 1000)) return null;
-  if (userIdNum <= 0) return null;
-  return { userId: userIdNum };
+  if (userIdNum <= 0 || iatNum <= 0) return null;
+  return { userId: userIdNum, iat: iatNum };
 }
 
 // —— 设置 Session Cookie ——
@@ -83,8 +85,10 @@ function verify(token) {
 // 默认按请求 scheme 推断：HTTPS 才标记 Secure，避免本地 HTTP 开发时浏览器/requests 不回带 cookie
 // 想强制开启/关闭可设环境变量 COOKIE_SECURE=true|false
 function setSessionCookie(req, res, userId) {
-  const expiresAt = Math.floor(Date.now() / 1000) + MAX_AGE_SECONDS;
-  const token = sign(userId, expiresAt);
+  const now = Math.floor(Date.now() / 1000);
+  const iat = now;
+  const expiresAt = now + MAX_AGE_SECONDS;
+  const token = sign(userId, iat, expiresAt);
   const envSecure = process.env.COOKIE_SECURE;
   const secure = envSecure !== undefined ? envSecure !== 'false' : !!req.secure;
   res.cookie(COOKIE_NAME, token, {
@@ -108,7 +112,7 @@ const db = require('./db');
 function getUserById(id) {
   if (!Number.isFinite(id) || id <= 0) return null;
   return db.prepare(
-    'SELECT id, username, role, status, email, name, bio, avatar_filename, created_at FROM users WHERE id = ?'
+    'SELECT id, username, role, status, email, name, bio, avatar_filename, created_at, tokens_valid_after FROM users WHERE id = ?'
   ).get(id) || null;
 }
 
@@ -131,24 +135,27 @@ function listUsers() {
 // preHashed=true 表示 password 已经是 SHA-256 哈希值（来自前端）
 // preHashed=false 表示 password 是明文，需要先 SHA-256 再 bcrypt
 // role 三档：admin（全局）/ moderator（普通管理员）/ user（普通用户）
-function createUser({ username, password, preHashed, role = 'user', email = null, status = 'active', verifyToken = null, verifyExpires = null }) {
-  const hash = bcrypt.hashSync(preHashed ? password : sha256(password), BCRYPT_COST);
+// 异步版：bcrypt 计算 ~200ms，不阻塞事件循环
+async function createUser({ username, password, preHashed, role = 'user', email = null, status = 'active', verifyToken = null, verifyExpires = null }) {
+  const hash = await bcrypt.hash(preHashed ? password : sha256(password), BCRYPT_COST);
   const info = db.prepare(`
     INSERT INTO users (username, password_hash, role, hash_version, email, status, verify_token, verify_expires)
     VALUES (?, ?, ?, 2, ?, ?, ?, ?)
   `).run(username, hash, role, email, status, verifyToken, verifyExpires);
+  db.invalidateUserCount();
   return getUserById(info.lastInsertRowid);
 }
 
 // 删除用户
 function deleteUser(id) {
   const info = db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  if (info.changes > 0) db.invalidateUserCount();
   return info.changes > 0;
 }
 
 // 更新密码（始终使用 v2 哈希方案：bcrypt(sha256(明文))）
-function updatePassword(id, newPassword) {
-  const hash = bcrypt.hashSync(sha256(newPassword), BCRYPT_COST);
+async function updatePassword(id, newPassword) {
+  const hash = await bcrypt.hash(sha256(newPassword), BCRYPT_COST);
   const info = db.prepare('UPDATE users SET password_hash = ?, hash_version = 2 WHERE id = ?').run(hash, id);
   return info.changes > 0;
 }
@@ -157,18 +164,18 @@ function updatePassword(id, newPassword) {
 // 支持两种输入：
 //   password_hash: 前端已做 SHA-256（推荐，避免明文传输）
 //   password: 明文密码（回退方案，后端自行计算 SHA-256）
-function verifyPassword({ password, password_hash }, user) {
+async function verifyPassword({ password, password_hash }, user) {
   if (!user) return { ok: false };
 
   // 优先使用 password_hash（前端 SHA-256）
   if (password_hash) {
-    return bcrypt.compareSync(password_hash, user.password_hash) ? { ok: true, user } : { ok: false };
+    return await bcrypt.compare(password_hash, user.password_hash) ? { ok: true, user } : { ok: false };
   }
 
   // 回退：前端未做 SHA-256，后端自行计算
   if (password) {
     const hash = sha256(password);
-    return bcrypt.compareSync(hash, user.password_hash) ? { ok: true, user } : { ok: false };
+    return await bcrypt.compare(hash, user.password_hash) ? { ok: true, user } : { ok: false };
   }
 
   return { ok: false };
@@ -177,12 +184,18 @@ function verifyPassword({ password, password_hash }, user) {
 // —— 鉴权中间件 ——
 
 // requireAuth: 验证 session token，将用户信息挂载到 req.user
+// 同时校验：改密码后旧的 token 应被作废
 function requireAuth(req, res, next) {
   const token = req.cookies && req.cookies[COOKIE_NAME];
   const session = verify(token);
   if (!session) return res.status(401).json({ error: 'unauthorized' });
   const user = getUserById(session.userId);
   if (!user) return res.status(401).json({ error: 'unauthorized' });
+  // tokens_valid_after 是该用户上一次「踢掉所有 session」的时间戳
+  // 本 token 必须在它之后签发才有效
+  if (session.iat < (user.tokens_valid_after || 0)) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
   req.user = user;
   next();
 }

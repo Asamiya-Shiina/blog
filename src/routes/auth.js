@@ -16,6 +16,8 @@ const { z } = require('zod');
 const db = require('../db');
 const captcha = require('../captcha');
 const mailer = require('../mailer');
+const audit = require('../audit');
+const cryptoBox = require('../crypto-box');
 const {
   setSessionCookie,
   clearSessionCookie,
@@ -39,6 +41,33 @@ const AVATAR_DIR = path.join(__dirname, '..', '..', 'data', 'uploads', 'avatars'
 fs.mkdirSync(AVATAR_DIR, { recursive: true });
 const AVATAR_MIME = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif' };
 const AVATAR_MAX = 100 * 1024; // 头像上限 100KB
+
+// 校验图片文件头几个字节（magic number）是否与声称的 MIME 一致。
+// 客户端可以随意改 Content-Type，但 buffer 前几字节由文件本身决定，
+// 改不动。所以即使攻击者声明 image/png，提交的是 HTML/SVG/可执行文件也会被拒。
+// PNG: 89 50 4E 47 0D 0A 1A 0A
+// JPEG: FF D8 FF
+// GIF: 47 49 46 38 (37|39) 61
+// WEBP: 52 49 46 46 ?? ?? ?? ?? 57 45 42 50
+function checkImageMagic(mime, buf) {
+  if (mime === 'image/png') {
+    return buf.length >= 8 &&
+      buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47 &&
+      buf[4] === 0x0D && buf[5] === 0x0A && buf[6] === 0x1A && buf[7] === 0x0A;
+  }
+  if (mime === 'image/jpeg') {
+    return buf.length >= 3 && buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
+  }
+  if (mime === 'image/gif') {
+    return buf.length >= 4 && buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38;
+  }
+  if (mime === 'image/webp') {
+    return buf.length >= 12 &&
+      buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&  // RIFF
+      buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50;   // WEBP
+  }
+  return false;
+}
 
 // —— 速率限制器 ——
 
@@ -69,12 +98,48 @@ const writeLimiter = rateLimit({
   message: { error: 'too many requests, try again later' },
 });
 
+// captcha 限流：每 IP 每分钟最多 30 次，防 captcha 内存被打满
+// MAX_ITEMS=2000 是内存硬上限，但攻击者可以快速把 token 塞满后再不断 GET
+// 拿一堆没用完的 token；这个限流就是给这道闸门
+const captchaLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'too many captcha requests, try again later' },
+});
+
 // —— 输入校验 Schema（Zod） ——
 
 // 用户名：1-64 字符，只允许字母数字下划线连字符
 const usernameSchema = z.string().min(1).max(64).regex(/^[a-zA-Z0-9_-]+$/, 'invalid username');
-// 密码：8-256 字符
-const passwordSchema = z.string().min(8).max(256);
+
+// 常见弱密码黑名单（取最常被撞库的前 50 条；服务端的「最终防线」作用有限，
+// 但挡掉「123456」「qwerty」这种最常被扫的字典项还是值得）
+const COMMON_PASSWORDS = new Set([
+  '12345678', '123456789', '1234567890', '1234567', '12345', '11111111',
+  '00000000', 'password', 'password1', 'password123', 'qwerty', 'qwerty123',
+  'abc12345', 'abc123', 'iloveyou', 'admin123', 'admin1234', 'admin12345',
+  'letmein', 'welcome', 'monkey123', 'dragon123', 'master123', 'login123',
+  'princess1', 'sunshine1', 'trustno1', 'shadow123', 'michael1', 'jennifer1',
+  'jordan23', 'michelle1', 'daniel123', 'andrew123', 'charlie1', 'jessica1',
+  'ashley123', 'fuckyou1', 'football1', 'baseball1', 'soccer123', 'hockey123',
+  'batman123', 'superman1', 'starwars1', 'killer123', 'jordan123', 'thomas123',
+  'robert123',
+]);
+
+// 密码强度校验：至少 10 位，必须含字母和数字，且不在常见弱密码清单中
+function validatePassword(pw) {
+  if (typeof pw !== 'string') return 'invalid password';
+  if (pw.length < 10) return '密码至少需要 10 个字符';
+  if (pw.length > 256) return '密码过长';
+  if (!/[a-zA-Z]/.test(pw)) return '密码必须包含字母';
+  if (!/[0-9]/.test(pw)) return '密码必须包含数字';
+  if (COMMON_PASSWORDS.has(pw.toLowerCase())) return '密码过于常见，请换一个';
+  return null;
+}
+// 密码：服务端再用 zod 控一遍长度，强度由 validatePassword 补
+const passwordSchema = z.string().min(10).max(256);
 // 创建用户：用户名必填，密码或密码哈希至少填一个
 const userCreateSchema = z.object({
   username: usernameSchema,
@@ -112,9 +177,20 @@ router.get('/setup-status', (_req, res) => {
 
 // POST /api/setup：创建首个管理员账号
 // 只有在没有任何用户时才能调用，防止被恶意创建管理员
-router.post('/setup', setupLimiter, (req, res) => {
+// 如果 .env 里设置了 SETUP_TOKEN，调用时必须通过 X-Setup-Token 头带上，
+// 否则返回 403。这是为了在生产环境（特别是首次部署时）防止被网络嗅探抢注
+router.post('/setup', setupLimiter, async (req, res) => {
   if (db.userCount() !== 0) {
     return res.status(409).json({ error: 'setup already done' });
+  }
+  const expected = process.env.SETUP_TOKEN;
+  if (expected) {
+    const got = req.get('X-Setup-Token');
+    // timingSafeEqual 长度不匹配会抛 RangeError，必须先比长度
+    if (!got || got.length !== expected.length ||
+        !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected))) {
+      return res.status(403).json({ error: 'invalid setup token' });
+    }
   }
   const parsed = userCreateSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -123,8 +199,11 @@ router.post('/setup', setupLimiter, (req, res) => {
   // 优先使用 password_hash（前端已 SHA-256），否则用 password（明文）
   const pw = parsed.data.password_hash || parsed.data.password;
   const preHashed = !!parsed.data.password_hash;
-  const user = createUser({ username: parsed.data.username, password: pw, preHashed, role: 'admin' });
+  const pwErr = validatePassword(pw);
+  if (pwErr) return res.status(400).json({ error: pwErr });
+  const user = await createUser({ username: parsed.data.username, password: pw, preHashed, role: 'admin' });
   setSessionCookie(req, res, user.id);
+  audit.log({ actorId: user.id, targetId: user.id, action: 'user.setup', detail: { username: user.username } });
   res.status(201).json({ id: user.id, username: user.username, role: user.role });
 });
 
@@ -132,7 +211,7 @@ router.post('/setup', setupLimiter, (req, res) => {
 
 // GET /api/captcha：生成滑块验证数据（public）
 // 返回 { token, targetX, width, sliderWidth }，前端据此画缺口并校验拖拽
-router.get('/captcha', (_req, res) => {
+router.get('/captcha', captchaLimiter, (_req, res) => {
   captcha.sweep();
   res.json(captcha.create());
 });
@@ -152,6 +231,17 @@ router.post('/register', writeLimiter, async (req, res) => {
 
   const pw = password_hash || password;
   const preHashed = !!password_hash;
+  const pwErr = validatePassword(pw);
+  if (pwErr) return res.status(400).json({ error: pwErr });
+
+  // 先分别查 username / email 是否被占用，再决定返回，统一 409 消息。
+  // 如果直接 INSERT 让 UNIQUE 约束抛异常再捕获，异常时机因命中列不同而不同，
+  // 攻击者可以通过响应时间差分辨出「username 已存在」还是「email 已存在」。
+  const userByName = db.prepare('SELECT 1 FROM users WHERE username = ?').get(username);
+  const userByEmail = db.prepare('SELECT 1 FROM users WHERE email = ?').get(email);
+  if (userByName || userByEmail) {
+    return res.status(409).json({ error: 'username or email already exists' });
+  }
   const needsVerify = !!mailer.getSmtpConfig();
 
   let user;
@@ -159,13 +249,13 @@ router.post('/register', writeLimiter, async (req, res) => {
     if (needsVerify) {
       const verifyToken = crypto.randomBytes(24).toString('hex');
       const verifyExpires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-      user = createUser({ username, password: pw, preHashed, role: 'user', email, status: 'pending', verifyToken, verifyExpires });
+      user = await createUser({ username, password: pw, preHashed, role: 'user', email, status: 'pending', verifyToken, verifyExpires });
       const result = await mailer.sendVerifyEmail(verifyToken, email);
       if (!result.sent) {
         console.log(`[dev] verify link for ${email}: /api/verify?token=${verifyToken}`);
       }
     } else {
-      user = createUser({ username, password: pw, preHashed, role: 'user', email, status: 'active' });
+      user = await createUser({ username, password: pw, preHashed, role: 'user', email, status: 'active' });
     }
   } catch (err) {
     if (err && err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
@@ -173,6 +263,7 @@ router.post('/register', writeLimiter, async (req, res) => {
     }
     throw err;
   }
+  audit.log({ actorId: null, targetId: user.id, action: 'user.register', detail: { username, needsVerify } });
   res.status(201).json({ id: user.id, username: user.username, role: user.role, needsVerify });
 });
 
@@ -289,7 +380,7 @@ router.get('/verify', (req, res) => {
 
 // POST /api/login：用户名密码登录
 // 接受 password_hash（推荐）或 password（回退）
-router.post('/login', loginLimiter, (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const parsed = z.object({
     username: z.string().min(1).max(64),
     password: z.string().min(1).max(256).optional(),
@@ -305,11 +396,14 @@ router.post('/login', loginLimiter, (req, res) => {
 
   // 用户不存在时也走一次 bcrypt，保持响应耗时恒定，避免用户名枚举
   if (!user) {
-    bcrypt.compareSync(password_hash || password, PLACEHOLDER_HASH);
+    const dummy = password_hash || password;
+    if (typeof dummy === 'string' && dummy.length > 0) {
+      await bcrypt.compare(dummy, PLACEHOLDER_HASH);
+    }
     return res.status(401).json({ error: 'invalid credentials' });
   }
 
-  const result = verifyPassword({ password, password_hash }, user);
+  const result = await verifyPassword({ password, password_hash }, user);
   if (!result.ok) {
     return res.status(401).json({ error: 'invalid credentials' });
   }
@@ -321,12 +415,14 @@ router.post('/login', loginLimiter, (req, res) => {
 
   // 登录成功，签发 session cookie
   setSessionCookie(req, res, user.id);
+  audit.log({ actorId: user.id, targetId: user.id, action: 'user.login', detail: { username } });
   res.status(204).end();
 });
 
 // POST /api/logout：退出登录，清除 session cookie
-router.post('/logout', requireAuth, (_req, res) => {
+router.post('/logout', requireAuth, (req, res) => {
   clearSessionCookie(res);
+  audit.log({ actorId: req.user.id, targetId: req.user.id, action: 'user.logout' });
   res.status(204).end();
 });
 
@@ -390,6 +486,11 @@ router.post('/me/avatar', requireAuth, writeLimiter, async (req, res) => {
   const buf = Buffer.from(await file.arrayBuffer());
   if (buf.length === 0) return res.status(400).json({ error: 'empty file' });
   if (buf.length > AVATAR_MAX) return res.status(413).json({ error: 'avatar too large (max 100KB)' });
+  // magic byte 校验：客户端声明的 MIME 必须与文件实际内容相符
+  // 防止传 .png 扩展但内容是 HTML/SVG/可执行文件
+  if (!checkImageMagic(mime, buf)) {
+    return res.status(400).json({ error: 'file content does not match declared image type' });
+  }
 
   const storedName = crypto.randomUUID() + ext;
   try {
@@ -415,15 +516,18 @@ router.get('/users', requireAuth, requireAdmin, (_req, res) => {
 });
 
 // POST /api/users：创建新用户（管理员操作）
-router.post('/users', requireAuth, requireAdmin, writeLimiter, (req, res) => {
+router.post('/users', requireAuth, requireAdmin, writeLimiter, async (req, res) => {
   const parsed = userCreateSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid request' });
   }
+  const pw = parsed.data.password_hash || parsed.data.password;
+  const preHashed = !!parsed.data.password_hash;
+  const pwErr = validatePassword(pw);
+  if (pwErr) return res.status(400).json({ error: pwErr });
   try {
-    const pw = parsed.data.password_hash || parsed.data.password;
-    const preHashed = !!parsed.data.password_hash;
-    const user = createUser({ username: parsed.data.username, password: pw, preHashed });
+    const user = await createUser({ username: parsed.data.username, password: pw, preHashed });
+    audit.log({ actorId: req.user.id, targetId: user.id, action: 'user.create', detail: { username: user.username, role: user.role } });
     res.status(201).json({ id: user.id, username: user.username, role: user.role });
   } catch (err) {
     // SQLite 唯一约束冲突 = 用户名已存在
@@ -442,13 +546,14 @@ router.delete('/users/:id', requireAuth, requireAdmin, (req, res) => {
     return res.status(400).json({ error: 'cannot delete yourself' });
   }
   if (!deleteUser(id)) return res.status(404).json({ error: 'not found' });
+  audit.log({ actorId: req.user.id, targetId: id, action: 'user.delete' });
   res.status(204).end();
 });
 
 // PATCH /api/users/:id/password：修改密码
 // 自己改自己：需要验证旧密码
 // 管理员改别人：不需要旧密码
-router.patch('/users/:id/password', requireAuth, writeLimiter, (req, res) => {
+router.patch('/users/:id/password', requireAuth, writeLimiter, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'invalid id' });
   // 权限检查：只能改自己的密码，或者管理员可以改任何人的
@@ -463,7 +568,7 @@ router.patch('/users/:id/password', requireAuth, writeLimiter, (req, res) => {
   if (id === req.user.id) {
     const user = getUserByUsername(req.user.username);
     if (!user) return res.status(403).json({ error: 'incorrect password' });
-    const result = verifyPassword({
+    const result = await verifyPassword({
       password: parsed.data.old_password,
       password_hash: parsed.data.old_password_hash,
     }, user);
@@ -471,9 +576,17 @@ router.patch('/users/:id/password', requireAuth, writeLimiter, (req, res) => {
   }
   // 优先使用 new_password_hash（前端已 sha256），否则用 new_password（明文）
   const newPw = parsed.data.new_password_hash || parsed.data.new_password;
-  const hash = bcrypt.hashSync(sha256(newPw), BCRYPT_COST);
-  const info = db.prepare('UPDATE users SET password_hash = ?, hash_version = 2 WHERE id = ?').run(hash, id);
+  const pwErr = validatePassword(newPw);
+  if (pwErr) return res.status(400).json({ error: pwErr });
+  const hash = await bcrypt.hash(sha256(newPw), BCRYPT_COST);
+  // 同时把 tokens_valid_after 推到当前时刻，让该用户所有已签发的 session 立刻失效
+  // 防止被改密码前泄露的旧 cookie 继续使用
+  const nowEpoch = Math.floor(Date.now() / 1000);
+  const info = db.prepare(
+    'UPDATE users SET password_hash = ?, hash_version = 2, tokens_valid_after = ? WHERE id = ?'
+  ).run(hash, nowEpoch, id);
   if (info.changes === 0) return res.status(404).json({ error: 'not found' });
+  audit.log({ actorId: req.user.id, targetId: id, action: 'password.change' });
   res.status(204).end();
 });
 
@@ -489,8 +602,14 @@ router.patch('/users/:id/role', requireAuth, requireAdmin, (req, res) => {
   if (id === req.user.id && role !== 'admin') {
     return res.status(400).json({ error: 'cannot demote yourself' });
   }
+  // 记录改之前的角色，用于审计
+  const before = db.prepare('SELECT role FROM users WHERE id = ?').get(id);
   const info = db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, id);
   if (info.changes === 0) return res.status(404).json({ error: 'not found' });
+  audit.log({
+    actorId: req.user.id, targetId: id, action: 'role.change',
+    detail: { from: before ? before.role : null, to: role },
+  });
   res.status(204).end();
 });
 
@@ -533,11 +652,14 @@ router.put('/site/smtp', requireAuth, requireAdmin, (req, res) => {
     // 不传 secure 视为沿用旧值；显式传 true/false 才覆盖
     secure: typeof d.secure === 'boolean' ? d.secure : !!prev.secure,
     user: d.user,
-    pass: d.pass || prev.pass || '',
+    // 用户没传新密码 → 沿用旧值（已经是密文了，不用再加密）
+    // 用户传了新密码 → 加密后落库
+    pass: d.pass ? cryptoBox.encrypt(d.pass) : (prev.pass || ''),
     sender: d.sender,
   };
   db.prepare(`INSERT INTO status_config (key, value) VALUES ('smtp', ?)
               ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(JSON.stringify(cfg));
+  audit.log({ actorId: req.user.id, targetId: null, action: 'smtp.update', detail: { host: cfg.host, user: cfg.user, configured: !!(cfg.host && cfg.user && cfg.pass) } });
   res.json({ configured: !!(cfg.host && cfg.user && cfg.pass) });
 });
 

@@ -18,7 +18,9 @@ const MAX_X = WIDTH - SLIDER_W - 20;
 const store = new Map();       // token -> { targetX, expiresAt }
 
 function create() {
-  const targetX = MIN_X + Math.floor(Math.random() * (MAX_X - MIN_X));
+  // 用 CSPRNG 而不是 Math.random()：Math.random 的输出可预测，
+  // 攻击者拿到几张目标图后能推断下一个 token 的位置
+  const targetX = crypto.randomInt(MIN_X, MAX_X);
   const token = crypto.randomUUID();
   store.set(token, { targetX, expiresAt: Date.now() + TTL_MS });
   return { token, targetX, width: WIDTH, sliderWidth: SLIDER_W };
@@ -47,3 +49,8 @@ function sweep() {
 }
 
 module.exports = { create, verify, sweep, WIDTH };
+
+// 定期主动清理过期项（默认每 60s 一次），避免没有 create 调用时
+// 内存里堆积一堆失效 token 占着位置
+const sweepTimer = setInterval(sweep, 60_000);
+sweepTimer.unref();

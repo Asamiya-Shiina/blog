@@ -6,15 +6,18 @@
 
 const nodemailer = require('nodemailer');
 const db = require('./db');
+const { decrypt } = require('./crypto-box');
 
 // 读取 SMTP 配置;host/user/pass 缺任一视为未配置
+// pass 是加密落库的，这里读出来时自动解密回明文
 function getSmtpConfig() {
   const row = db.prepare("SELECT value FROM status_config WHERE key = 'smtp'").get();
   if (!row) return null;
   let cfg;
   try { cfg = JSON.parse(row.value); } catch { return null; }
   if (!cfg || !cfg.host || !cfg.user || !cfg.pass) return null;
-  return cfg;
+  const plain = decrypt(cfg.pass);
+  return { ...cfg, pass: plain };
 }
 
 // 站点根地址,用于拼验证链接;可用 SITE_URL 覆盖

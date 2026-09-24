@@ -129,6 +129,18 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_id);
   CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at DESC);
+
+  -- 审计日志：关键操作留痕（角色变更、密码修改、用户增删、SMTP 修改等）
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    at          TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+    actor_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,  -- 操作人（NULL=系统/匿名）
+    target_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,  -- 作用对象（用户相关操作时填）
+    action      TEXT NOT NULL,                                     -- 动作名，如 user.create / role.change
+    detail      TEXT                                               -- JSON 字符串，存额外上下文
+  );
+  CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log(at DESC);
+  CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log(actor_id);
 `);
 
 // —— 数据库迁移 ——
@@ -138,6 +150,13 @@ db.exec(`
 // 2 = bcrypt(sha256(明文))（当前方案，解决 bcrypt 72 字节限制）
 try {
   db.exec(`ALTER TABLE users ADD COLUMN hash_version INTEGER NOT NULL DEFAULT 1`);
+} catch (_) { /* 列已存在则忽略 */ }
+
+// 迁移 3：users 表添加 tokens_valid_after 列
+// 改密码 / 删用户时把这个值推到当前 epoch（秒），所有更早签发的 session token 立刻失效
+// 解决「token 是无状态 HMAC，丢失后即便改密码也仍然可用」的问题
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN tokens_valid_after INTEGER NOT NULL DEFAULT 0`);
 } catch (_) { /* 列已存在则忽略 */ }
 
 // 迁移 2：users 表结构升级（开放注册 + 个人主页）
@@ -174,6 +193,8 @@ if (!userCols.includes('email')) {
     `);
   })();
   db.exec(`PRAGMA foreign_keys = ON`);
+  // 重建了 users 表，行数可能变，让缓存下次重新查
+  invalidateUserCount();
 }
 
 // 保证 email 索引存在（全新库或迁移后都成立）
@@ -202,9 +223,25 @@ for (const [key, value] of Object.entries(defaultConfig)) {
 }
 
 // 查询用户总数（用于首次引导判断）
+// 加 5s 内存缓存：站点判断「有没有管理员」是每请求都查的高频路径，
+// 不缓存的话 SELECT COUNT(*) 在百万行时会扫全表
+let _userCountCache = null;
+let _userCountCachedAt = 0;
+const USER_COUNT_TTL_MS = 5000;
 function userCount() {
-  return db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+  const now = Date.now();
+  if (_userCountCache !== null && now - _userCountCachedAt < USER_COUNT_TTL_MS) {
+    return _userCountCache;
+  }
+  _userCountCache = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+  _userCountCachedAt = now;
+  return _userCountCache;
 }
+
+// 任何写操作影响 users 表行数时必须调这个，否则 5 秒内 userCount() 会返回旧值
+// （首次引导场景下最多让「无管理员」状态多持续 5 秒，可接受）
+function invalidateUserCount() { _userCountCache = null; _userCountCachedAt = 0; }
 
 module.exports = db;
 module.exports.userCount = userCount;
+module.exports.invalidateUserCount = invalidateUserCount;

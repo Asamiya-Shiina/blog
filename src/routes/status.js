@@ -115,6 +115,8 @@ const MAX_SSE_CLIENTS = 50;
 
 router.get('/stream', (req, res) => {
   if (store.clientCount >= MAX_SSE_CLIENTS) {
+    // 告诉浏览器等 60s 再重试，避免 50 个连接满后所有客户端都疯狂重连
+    res.setHeader('Retry-After', '60');
     return res.status(429).json({ error: 'too many connections' });
   }
   // 设置 SSE 响应头

@@ -64,23 +64,45 @@ app.use(express.urlencoded({ extended: false }));
 // 解析 Cookie，供 session 验证使用
 app.use(cookieParser());
 
-// 反向代理信任层数，通过环境变量配置
-// 部署在 Nginx/Caddy 后面时需要设置，否则 X-Forwarded-For 可被伪造
-app.set('trust proxy', parseInt(process.env.TRUST_PROXY || '1', 10));
+// 反向代理信任层数。默认不信任任何 X-Forwarded-For（裸跑时防止客户端伪造 IP
+// 绕过速率限制、污染留言属地）；前面接了 Caddy/Nginx 时再用环境变量打开
+// 例：TRUST_PROXY=1 信任一层反代；TRUST_PROXY=true 完全信任
+const TRUST_PROXY_RAW = process.env.TRUST_PROXY;
+let trustProxy = false;
+if (TRUST_PROXY_RAW === 'true') trustProxy = true;
+else if (TRUST_PROXY_RAW === 'false' || TRUST_PROXY_RAW === undefined || TRUST_PROXY_RAW === '') trustProxy = false;
+else if (/^\d+$/.test(TRUST_PROXY_RAW)) trustProxy = parseInt(TRUST_PROXY_RAW, 10);
+else trustProxy = TRUST_PROXY_RAW;   // 其它（loopback / linklocal 等关键字）原样传给 express
+app.set('trust proxy', trustProxy);
 
 // —— 安全响应头 ——
 // 所有响应统一设置安全头，防止 MIME 嗅探、点击劫持、XSS 等攻击
 app.use((_req, res, next) => {
   // 禁止浏览器猜测 MIME 类型
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  // 禁止被嵌入 iframe（防点击劫持）
+  // 禁止被嵌入 iframe（防点击劫持；CSP frame-ancestors 也会兜底）
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   // 控制 Referer 信息泄露
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   // 禁用摄像头、麦克风、地理位置等浏览器 API
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  // 内容安全策略：只允许加载同源资源，允许内联脚本/样式
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'");
+  // 显式关闭已被现代浏览器废弃的 XSS 过滤器（开着会和 CSP 互相干扰，且实现有 bug）
+  res.setHeader('X-XSS-Protection', '0');
+  // 内容安全策略：只允许同源资源，禁止内联脚本（脚本外置到 .js 文件后已可实施），
+  // 禁止 object/embed、限定 <base>、限定表单提交目标；img 允许 data: 用于头像占位
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; " +
+    "script-src 'self'; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data:; " +
+    "media-src 'self'; " +
+    "font-src 'self' data:; " +
+    "connect-src 'self'; " +
+    "object-src 'none'; " +
+    "base-uri 'none'; " +
+    "form-action 'self'; " +
+    "frame-ancestors 'none'"
+  );
   // HSTS：强制浏览器在一年内使用 HTTPS 访问
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   next();
@@ -97,13 +119,16 @@ function requireAdminPage(req, res, next) {
   const token = req.cookies && req.cookies[COOKIE_NAME];
   const session = verify(token);
   if (session) {
-    const user = db.prepare('SELECT role FROM users WHERE id = ?').get(session.userId);
-    if (user) {
-      const isManager = user.role === 'admin' || user.role === 'moderator';
-      const isGlobal = user.role === 'admin';
-      // 注意：req.path 已被挂载前缀剥掉（'/'+mount 后为 '/users'），必须用 originalUrl 判断
-      const usersArea = req.originalUrl.startsWith('/managers/users');
-      const smtpArea = req.originalUrl.startsWith('/managers/smtp');
+    const row = db.prepare('SELECT role, tokens_valid_after FROM users WHERE id = ?').get(session.userId);
+    if (row && session.iat >= (row.tokens_valid_after || 0)) {
+      const isManager = row.role === 'admin' || row.role === 'moderator';
+      const isGlobal = row.role === 'admin';
+      // req.path 已被挂载前缀剥掉，例如 /managers/users/ → /users/
+      // 严格匹配：必须是 /users（可带 /xxx）才视为用户管理区，
+      // 避免 /managers/usersfoo 或 /managers/users-old 之类的旁路
+      const path = req.path;
+      const usersArea = path === '/users' || path.startsWith('/users/');
+      const smtpArea  = path === '/smtp'  || path.startsWith('/smtp/');
       // 仅全局管理员才能进 /users 与 /smtp，其余后台区域 admin/moderator 都可
       const restricted = (usersArea || smtpArea) && !isGlobal;
       if (isManager && !restricted) return next();
@@ -117,13 +142,15 @@ app.use('/managers/', requireAdminPage);
 
 // —— 个人主页页面鉴权 ——
 // /me/* 任何已登录用户（含普通用户 user）可访问，未登录跳 /login/
+// 与 requireAdminPage 一致：放行明确的静态资源扩展名，避免静态 JS/CSS 被守卫挡
 function requireLoginPage(req, res, next) {
   const token = req.cookies && req.cookies[COOKIE_NAME];
   const session = verify(token);
   if (session) {
-    const user = db.prepare('SELECT 1 FROM users WHERE id = ?').get(session.userId);
-    if (user) return next();
+    const row = db.prepare('SELECT 1, tokens_valid_after FROM users WHERE id = ?').get(session.userId);
+    if (row && session.iat >= (row.tokens_valid_after || 0)) return next();
   }
+  if (/\.(?:css|js|png|jpe?g|gif|svg|ico|woff2?|ttf|eot|map)$/i.test(req.path)) return next();
   return res.redirect('/login/');
 }
 app.use('/me/', requireLoginPage);
@@ -261,21 +288,23 @@ const searchLimiter = rateLimit({
 // 防止用户反复刷新浪费数据库查询
 const lastSearch = new Map();
 
+function sweepLastSearch() {
+  const now = Date.now();
+  for (const [ip, entry] of lastSearch) {
+    if (now - entry.at > SEARCH_WINDOW_MS) lastSearch.delete(ip);
+  }
+  if (lastSearch.size > 1000) lastSearch.clear();
+}
+
 function repeatSearchGuard(req, res, next) {
   const q = normalizeQuery(req.query.q);
   req.searchQuery = q;
   if (!q) return next();
 
-  const now = Date.now();
-  // Map 超过 500 条时清理过期条目
-  if (lastSearch.size > 500) {
-    for (const [ip, entry] of lastSearch) {
-      if (now - entry.at > SEARCH_WINDOW_MS) lastSearch.delete(ip);
-    }
-    // 超过 1000 条强制清空，防止内存泄漏
-    if (lastSearch.size > 1000) lastSearch.clear();
-  }
+  // 同步路径：>500 时也走同一份清理逻辑，保持和异步 sweep 一致
+  if (lastSearch.size > 500) sweepLastSearch();
 
+  const now = Date.now();
   const prev = lastSearch.get(req.ip);
   if (prev && prev.q === q && now - prev.at < SEARCH_WINDOW_MS) {
     return tooManySearches(res, '刚刚搜过同样的关键词了，换个词或者等三十秒再试。');
@@ -283,6 +312,10 @@ function repeatSearchGuard(req, res, next) {
   lastSearch.set(req.ip, { q, at: now });
   next();
 }
+
+// 定期清理过期的 lastSearch 条目（默认每 60 秒一次），不再每次搜索都遍历
+const lastSearchSweep = setInterval(sweepLastSearch, 60_000);
+lastSearchSweep.unref();   // 不阻塞进程退出
 
 // 搜索路由：限流 → 去重 → 查询 → 渲染
 app.get(['/search', '/search/'], searchLimiter, repeatSearchGuard, (req, res) => {
