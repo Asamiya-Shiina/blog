@@ -121,55 +121,6 @@
     </form>
   </div>
 
-  <script>
-    // 浏览器端 SHA-256：把明文密码先哈希再发给服务器
-    // 与后端 src/auth.js 的 sha256 + bcrypt(…, 12) 方案配套，
-    // 这样网络上传输的永远是 64 位十六进制哈希，避免明文裸露
-    async function sha256(password) {
-      const data = new TextEncoder().encode(password);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-      return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    const form = document.getElementById('form');
-    const btn  = document.getElementById('btn');
-    const err  = document.getElementById('error');
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      err.textContent = '';
-
-      const username = document.getElementById('username').value.trim();
-      const password = document.getElementById('password').value;
-      const confirm  = document.getElementById('confirm').value;
-
-      // 前端先校验两次密码一致，不一致直接提示、不发请求
-      if (password !== confirm) {
-        err.textContent = '两次密码不一致';
-        return;
-      }
-
-      btn.disabled = true;   // 防重复提交
-      try {
-        // 只发送 sha256 后的哈希，不明文传密码
-        const password_hash = await sha256(password);
-        const res = await fetch('/api/setup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password_hash }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || '请求失败');
-        }
-        // 创建成功后服务端已写入登录 cookie，直接进后台首页
-        location.href = '/managers/';
-      } catch (ex) {
-        err.textContent = ex.message;
-      } finally {
-        btn.disabled = false;
-      }
-    });
-  </script>
+  <script src="/setup/setup.js"></script>
 </body>
 </html>
