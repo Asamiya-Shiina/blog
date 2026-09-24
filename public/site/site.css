@@ -259,6 +259,7 @@ a { color: inherit; }
   transition: transform 0.2s cubic-bezier(0.22, 0.61, 0.36, 1),
               box-shadow 0.3s ease;
 }
+.user-avatar[hidden] { display: none; }
 .user-avatar:hover {
   transform: translateY(-1px) scale(1.05);
   box-shadow: 0 6px 18px rgba(59, 130, 246, 0.4);
