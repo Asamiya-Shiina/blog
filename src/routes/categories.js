@@ -3,18 +3,18 @@
 // —— 分类路由 ——
 // 分类列表、新建、重命名、删除都归这儿管
 // 后台维护的分类列表，给编辑器多选用，也给全站筛选用
-// 所有路由都要登录（requireAuth），别忘了哦
+// 所有路由都要登录（requireManager），别忘了哦
 // 注：新建/重命名经 zod 校验唯一性；删除分类时关联记录由外键 CASCADE 自动清理
 // by ALyCE_Aoi
 // 后台维护的分类列表，供编辑器多选与全站筛选
-// 所有路由都需要登录（requireAuth）
+// 所有路由都需要登录（requireManager）
 // 注：新建/重命名经 zod 校验唯一性；删除分类时关联记录由外键 CASCADE 自动清理
 
 const express = require('express');
 const { z } = require('zod');
 
 const db = require('../db');
-const { requireAuth } = require('../auth');
+const { requireManager } = require('../auth');
 
 const router = express.Router();
 
@@ -36,7 +36,7 @@ function getPostCategories(postId) {
 
 // —— 分类列表 ——
 // GET /api/categories：返回全部分类，附每类的文章数
-router.get('/', requireAuth, (_req, res) => {
+router.get('/', requireManager, (_req, res) => {
   const rows = db.prepare(`
     SELECT c.id, c.name, c.created_at,
            (SELECT COUNT(*) FROM post_categories pc WHERE pc.category_id = c.id) AS post_count
@@ -48,7 +48,7 @@ router.get('/', requireAuth, (_req, res) => {
 
 // —— 新建分类 ——
 // POST /api/categories
-router.post('/', requireAuth, (req, res) => {
+router.post('/', requireManager, (req, res) => {
   const parsed = nameSchema.safeParse(req.body);
   if (!parsed.success || !parsed.data.name) {
     return res.status(400).json({ error: 'invalid name' });
@@ -66,7 +66,7 @@ router.post('/', requireAuth, (req, res) => {
 
 // —— 重命名分类 ——
 // PUT /api/categories/:id
-router.put('/:id', requireAuth, (req, res) => {
+router.put('/:id', requireManager, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'invalid id' });
   const existing = db.prepare('SELECT 1 FROM categories WHERE id = ?').get(id);
@@ -88,7 +88,7 @@ router.put('/:id', requireAuth, (req, res) => {
 
 // —— 删除分类 ——
 // DELETE /api/categories/:id：关联的 post_categories 记录由外键 CASCADE 自动删除
-router.delete('/:id', requireAuth, (req, res) => {
+router.delete('/:id', requireManager, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'invalid id' });
   const info = db.prepare('DELETE FROM categories WHERE id = ?').run(id);

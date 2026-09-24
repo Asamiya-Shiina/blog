@@ -9,7 +9,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { z } = require('zod');
-const { requireAuth, requireAdmin } = require('../auth');
+const { requireAuth, requireManager } = require('../auth');
 const db = require('../db');
 const store = require('../status-store');
 
@@ -137,7 +137,7 @@ router.get('/stream', (req, res) => {
 // ============ 管理 API（需要登录 + 管理员权限） ============
 
 // GET /api/data/admin/config：获取管理配置
-router.get('/admin/config', requireAuth, requireAdmin, (req, res) => {
+router.get('/admin/config', requireManager, (req, res) => {
   res.json(getAllConfig());
 });
 
@@ -152,7 +152,7 @@ const configSchema = z.object({
   titleAppPatterns: z.array(z.object({ pattern: z.string().max(200) })).optional(),
 });
 
-router.post('/admin/config', requireAuth, requireAdmin, (req, res) => {
+router.post('/admin/config', requireManager, (req, res) => {
   const parsed = configSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid config' });

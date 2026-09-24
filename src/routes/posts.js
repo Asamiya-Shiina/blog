@@ -2,7 +2,7 @@
 
 // —— 文章路由 ——
 // 列表、单篇查询、新建、更新、删除、预览，一个不缺
-// 所有路由都要登录（requireAuth）
+// 所有路由都要登录（requireManager）
 // by ALyCE_Aoi
 
 const express = require('express');
@@ -11,7 +11,7 @@ const DOMPurify = require('isomorphic-dompurify');
 const { z } = require('zod');
 
 const db = require('../db');
-const { requireAuth } = require('../auth');
+const { requireManager } = require('../auth');
 const { getPostCategories } = require('./categories');
 
 const router = express.Router();
@@ -115,7 +115,7 @@ const patchSchema = postSchema.partial();
 
 // —— 列表查询 ——
 // GET /api/posts：分页查询文章，支持按状态和关键词筛选
-router.get('/', requireAuth, (req, res) => {
+router.get('/', requireManager, (req, res) => {
   const status = typeof req.query.status === 'string' ? req.query.status : null;
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   const category_id = parseInt(req.query.category_id, 10);
@@ -172,7 +172,7 @@ router.get('/', requireAuth, (req, res) => {
 // —— Markdown 预览 ——
 // POST /api/posts/preview：渲染 Markdown 为 HTML，不保存
 const previewSchema = z.object({ content_md: z.string().max(200_000) });
-router.post('/preview', requireAuth, (req, res) => {
+router.post('/preview', requireManager, (req, res) => {
   const parsed = previewSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid request' });
   res.json({ content_html: renderHtml(parsed.data.content_md) });
@@ -180,7 +180,7 @@ router.post('/preview', requireAuth, (req, res) => {
 
 // —— 查询单篇 ——
 // GET /api/posts/:id：返回文章详情（含渲染后的 HTML）
-router.get('/:id', requireAuth, (req, res) => {
+router.get('/:id', requireManager, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'invalid id' });
   const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(id);
@@ -190,7 +190,7 @@ router.get('/:id', requireAuth, (req, res) => {
 
 // —— 新建文章 ——
 // POST /api/posts：创建新文章，默认状态为 draft
-router.post('/', requireAuth, (req, res) => {
+router.post('/', requireManager, (req, res) => {
   const parsed = postSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid' });
@@ -214,7 +214,7 @@ router.post('/', requireAuth, (req, res) => {
 
 // —— 更新文章 ——
 // PUT /api/posts/:id：部分更新，只修改提交的字段
-router.put('/:id', requireAuth, (req, res) => {
+router.put('/:id', requireManager, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'invalid id' });
   const existing = db.prepare('SELECT * FROM posts WHERE id = ?').get(id);
@@ -256,7 +256,7 @@ router.put('/:id', requireAuth, (req, res) => {
 
 // —— 删除文章 ——
 // DELETE /api/posts/:id
-router.delete('/:id', requireAuth, (req, res) => {
+router.delete('/:id', requireManager, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'invalid id' });
   const info = db.prepare('DELETE FROM posts WHERE id = ?').run(id);

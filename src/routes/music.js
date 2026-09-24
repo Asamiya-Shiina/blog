@@ -13,7 +13,7 @@ const crypto = require('node:crypto');
 const { Readable } = require('node:stream');
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { requireAuth, requireAdmin } = require('../auth');
+const { requireAuth, requireManager } = require('../auth');
 
 const db = require('../db');
 
@@ -76,7 +76,7 @@ router.get('/active', (_req, res) => {
 });
 
 // 列出所有歌曲（需登录）
-router.get('/', requireAuth, requireAdmin, (_req, res) => {
+router.get('/', requireManager, (_req, res) => {
   const rows = db.prepare('SELECT * FROM music ORDER BY created_at DESC').all();
   const setting = db.prepare('SELECT active_id FROM music_settings WHERE id = 1').get();
   const activeId = setting ? setting.active_id : null;
@@ -88,7 +88,7 @@ router.get('/', requireAuth, requireAdmin, (_req, res) => {
 // 上传歌曲（管理员）
 // Express req.body 是 Node Readable，与 Web Request.formData() 不直接兼容
 // 这里把 Node 流转成 Web ReadableStream 再构造一个 Request 调用原生 formData()
-router.post('/', requireAuth, requireAdmin, writeLimiter, async (req, res) => {
+router.post('/', requireManager, writeLimiter, async (req, res) => {
   let form;
   try {
     // 用 Node→Web 流转换 + Request 包装，让 undici 来解析 multipart
@@ -161,7 +161,7 @@ router.post('/', requireAuth, requireAdmin, writeLimiter, async (req, res) => {
 
 // 设置当前播放歌曲（管理员）
 // body: { id: number } 设为激活；{ id: null } 清除激活
-router.patch('/active', requireAuth, requireAdmin, writeLimiter, (req, res) => {
+router.patch('/active', requireManager, writeLimiter, (req, res) => {
   const id = req.body && req.body.id;
   if (id !== null && !Number.isInteger(id)) {
     return res.status(400).json({ error: 'id must be integer or null' });
@@ -179,7 +179,7 @@ router.patch('/active', requireAuth, requireAdmin, writeLimiter, (req, res) => {
 });
 
 // 删除歌曲（管理员）
-router.delete('/:id', requireAuth, requireAdmin, writeLimiter, (req, res) => {
+router.delete('/:id', requireManager, writeLimiter, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'invalid id' });
 
