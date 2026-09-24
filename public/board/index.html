@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>留言板</title>
+  <style>
+    :root { --fg: #1a1a1a; --muted: #6b6b6b; --accent: #3b82f6; --line: rgba(0,0,0,0.08); }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; min-height: 100vh; color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    body { background: url('/image/IMG_20250703_100031.jpeg') center/cover no-repeat fixed; position: relative; overflow-x: hidden; }
+    body::before { content: ''; position: fixed; inset: 0; background: rgba(255, 255, 255, 0.45); backdrop-filter: blur(10px) saturate(120%); -webkit-backdrop-filter: blur(10px) saturate(120%); pointer-events: none; z-index: 0; }
+    .wrap { position: relative; z-index: 1; max-width: 720px; margin: 48px auto; padding: 0 20px 64px; }
+    h1 { font-family: Georgia, "Times New Roman", "Songti SC", serif; font-weight: 400; font-size: 30px; margin: 0 0 8px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+    .topbar a { color: var(--muted); text-decoration: none; font-size: 14px; }
+    .topbar a:hover { color: var(--accent); }
+    .card { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%); border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08); padding: 24px; margin-bottom: 18px; animation: fadeUp 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    textarea { width: 100%; min-height: 90px; padding: 11px 14px; font: inherit; font-size: 15px; color: var(--fg); background: rgba(255, 255, 255, 0.6); border: 1px solid var(--line); border-radius: 10px; resize: vertical; outline: none; }
+    textarea:focus { border-color: var(--accent); background: rgba(255, 255, 255, 0.9); }
+    .btn { display: inline-block; padding: 8px 18px; border: 0; border-radius: 8px; font: inherit; font-size: 14px; cursor: pointer; background: var(--accent); color: #fff; transition: background 0.2s ease, transform 0.15s ease; }
+    .btn:hover { background: #2563eb; }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+    .btn-ghost:hover { background: rgba(0,0,0,0.04); color: var(--fg); }
+    .meta { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); margin-bottom: 8px; flex-wrap: wrap; }
+    .avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: rgba(0,0,0,0.06); flex-shrink: 0; }
+    .meta-text { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .meta .name { color: var(--fg); font-weight: 600; }
+    .role-tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: rgba(59,130,246,0.1); color: var(--accent); }
+    .role-tag.admin { background: rgba(220,38,38,0.1); color: #dc2626; }
+    .role-tag.moderator { background: rgba(34,197,94,0.1); color: #16a34a; }
+    .time-loc { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+    .loc { font-size: 12px; }
+    .content { white-space: pre-wrap; word-break: break-word; margin: 6px 0 12px; }
+    .actions { display: flex; gap: 12px; font-size: 13px; }
+    .actions button { background: none; border: 0; padding: 0; color: var(--muted); cursor: pointer; font: inherit; font-size: 13px; }
+    .actions button:hover { color: var(--accent); }
+    .actions .del:hover { color: #dc2626; }
+    .replies { margin-top: 14px; padding-left: 18px; border-left: 2px solid var(--line); }
+    .replies .card { background: rgba(255, 255, 255, 0.65); padding: 16px 18px; }
+    .reply-form { display: none; margin-top: 12px; }
+    .reply-form.is-open { display: block; }
+    .reply-form textarea { min-height: 60px; }
+    .reply-form .actions-row { display: flex; gap: 8px; margin-top: 8px; }
+    .empty { color: var(--muted); text-align: center; padding: 32px 0; }
+    .error { color: #dc2626; font-size: 13px; margin-top: 6px; min-height: 1em; }
+    .login-hint { background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2); border-radius: 10px; padding: 14px 18px; color: var(--fg); }
+    .login-hint a { color: var(--accent); text-decoration: none; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <h1>留言板</h1>
+      <a href="/">← 返回首页</a>
+    </div>
+
+    <div class="card" id="composer" hidden>
+      <textarea id="composer-text" placeholder="说点什么吧…" maxlength="2000"></textarea>
+      <div class="error" id="composer-error"></div>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px">
+        <button class="btn" id="composer-btn">发表</button>
+      </div>
+    </div>
+
+    <div class="card login-hint" id="login-hint" hidden>
+      留言需要登录，<a href="/login/">去登录</a> 或 <a href="/register/">注册账号</a>。
+    </div>
+
+    <div class="card login-hint" id="avatar-hint" hidden>
+      留言前请先在<a href="/me/">个人主页</a>上传头像。
+    </div>
+
+    <div id="list"><div class="empty">加载中…</div></div>
+  </div>
+
+  <script>
+    // 工具
+    function escapeHtml(s) {
+      return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+    function formatTime(t) {
+      if (!t) return '';
+      // 服务端是北京时间（+8h），按字符串直接展示 yyyy-mm-dd hh:mm
+      return t.replace('T', ' ').slice(0, 16);
+    }
+    function roleTagClass(role) { return role === 'admin' ? 'admin' : role === 'moderator' ? 'moderator' : ''; }
+    function roleTagLabel(role) { return role === 'admin' ? '管理员' : role === 'moderator' ? '版主' : ''; }
+
+    let me = null;       // 当前登录用户
+    let messages = [];   // 顶层留言 + 嵌套 replies
+
+    async function fetchMe() {
+      try {
+        const r = await fetch('/api/me', { credentials: 'same-origin' });
+        if (r.ok) me = await r.json();
+      } catch {}
+    }
+
+    async function fetchMessages() {
+      const r = await fetch('/api/messages');
+      const d = await r.json();
+      messages = d.messages || [];
+    }
+
+    function renderMessage(m, isChild) {
+      const wrap = document.createElement('div');
+      wrap.className = 'card';
+      wrap.dataset.id = m.id;
+
+      const tag = roleTagLabel(m.role) ? `<span class="role-tag ${roleTagClass(m.role)}">${roleTagLabel(m.role)}</span>` : '';
+      const avatar = m.avatar_url
+        ? `<img class="avatar" src="${escapeHtml(m.avatar_url)}" alt="" />`
+        : `<div class="avatar" aria-hidden="true"></div>`;
+      const loc = m.location ? `<span class="loc">${escapeHtml(m.location)}</span>` : '';
+      const ipAdmin = (me && me.role === 'admin' && m.ip) ? `<span class="loc">IP ${escapeHtml(m.ip)}</span>` : '';
+
+      const canDelete = m.is_owner || (me && me.role === 'admin');
+      const actions = [];
+      if (me && !isChild) actions.push(`<button class="reply-btn">回复</button>`);
+      if (canDelete) actions.push(`<button class="del">删除</button>`);
+
+      wrap.innerHTML = `
+        <div class="meta">
+          ${avatar}
+          <div class="meta-text">
+            <span class="name">${escapeHtml(m.username)}</span>${tag}
+            <span class="time-loc">${formatTime(m.created_at)}${loc ? ' · ' + loc : ''}</span>
+            ${ipAdmin}
+          </div>
+        </div>
+        <div class="content">${escapeHtml(m.content)}</div>
+        <div class="actions">${actions.join('')}</div>
+        <div class="reply-form" data-parent="${m.id}">
+          <textarea placeholder="回复 ${escapeHtml(m.username)}…" maxlength="2000"></textarea>
+          <div class="error"></div>
+          <div class="actions-row">
+            <button class="btn btn-sm reply-submit">发送</button>
+            <button class="btn btn-ghost btn-sm reply-cancel">取消</button>
+          </div>
+        </div>
+        ${!isChild && m.replies && m.replies.length ? '<div class="replies"></div>' : ''}
+      `;
+
+      const replyBtn = wrap.querySelector('.reply-btn');
+      if (replyBtn) replyBtn.addEventListener('click', () => {
+        const f = wrap.querySelector('.reply-form');
+        f.classList.toggle('is-open');
+        if (f.classList.contains('is-open')) f.querySelector('textarea').focus();
+      });
+      const delBtn = wrap.querySelector('.del');
+      if (delBtn) delBtn.addEventListener('click', async () => {
+        if (!confirm('删除这条留言？回复也会一起被删。')) return;
+        const r = await fetch(`/api/messages/${m.id}`, { method: 'DELETE' });
+        if (r.ok) await reload();
+        else alert('删除失败');
+      });
+
+      const replyForm = wrap.querySelector('.reply-form');
+      if (replyForm) {
+        replyForm.querySelector('.reply-cancel').addEventListener('click', () => {
+          replyForm.classList.remove('is-open');
+          replyForm.querySelector('textarea').value = '';
+          replyForm.querySelector('.error').textContent = '';
+        });
+        replyForm.querySelector('.reply-submit').addEventListener('click', async () => {
+          const ta = replyForm.querySelector('textarea');
+          const err = replyForm.querySelector('.error');
+          const text = ta.value.trim();
+          if (!text) { err.textContent = '内容不能为空'; return; }
+          err.textContent = '';
+          replyForm.querySelector('.reply-submit').disabled = true;
+          try {
+            const r = await fetch('/api/messages', {
+              method: 'POST', credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ content: text, parent_id: m.id }),
+            });
+            if (!r.ok) { err.textContent = (await r.json()).error || '失败'; return; }
+            ta.value = '';
+            replyForm.classList.remove('is-open');
+            await reload();
+          } finally {
+            replyForm.querySelector('.reply-submit').disabled = false;
+          }
+        });
+      }
+
+      if (!isChild && m.replies && m.replies.length) {
+        const repliesWrap = wrap.querySelector('.replies');
+        for (const c of m.replies) repliesWrap.appendChild(renderMessage(c, true));
+      }
+      return wrap;
+    }
+
+    function render() {
+      const list = document.getElementById('list');
+      list.innerHTML = '';
+      if (!messages.length) {
+        list.innerHTML = '<div class="empty">还没有留言，来当第一个吧 ✨</div>';
+        return;
+      }
+      for (const m of messages) list.appendChild(renderMessage(m, false));
+    }
+
+    async function reload() {
+      await fetchMessages();
+      render();
+    }
+
+    document.getElementById('composer-btn').addEventListener('click', async () => {
+      const ta = document.getElementById('composer-text');
+      const err = document.getElementById('composer-error');
+      const text = ta.value.trim();
+      if (!text) { err.textContent = '内容不能为空'; return; }
+      err.textContent = '';
+      const btn = document.getElementById('composer-btn');
+      btn.disabled = true;
+      try {
+        const r = await fetch('/api/messages', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: text }),
+        });
+        if (r.status === 401) { window.location.href = '/login/'; return; }
+        if (!r.ok) { err.textContent = (await r.json()).error || '失败'; return; }
+        ta.value = '';
+        await reload();
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    (async function init() {
+      await fetchMe();
+      if (me) {
+        // 已登录但没头像：只展示上传提示，不开放留言框
+        if (!me.avatar_url) {
+          document.getElementById('avatar-hint').hidden = false;
+        } else {
+          document.getElementById('composer').hidden = false;
+        }
+      } else {
+        document.getElementById('login-hint').hidden = false;
+      }
+      await reload();
+    })();
+  </script>
+</body>
+</html>

@@ -39,6 +39,9 @@ const { verify, COOKIE_NAME } = require('./src/auth');
 // 音乐上传目录：与 src/routes/music.js 保持一致
 const MUSIC_DIR = path.join(__dirname, 'data', 'uploads', 'music');
 fs.mkdirSync(MUSIC_DIR, { recursive: true });
+// 头像目录：与 src/routes/auth.js 保持一致
+const AVATAR_DIR = path.join(__dirname, 'data', 'uploads', 'avatars');
+fs.mkdirSync(AVATAR_DIR, { recursive: true });
 const { renderListPage, renderPostPage, renderSearchPage, renderNoticePage, renderCategoryPage } = require('./src/views/posts');
 const { renderStatusPage } = require('./src/views/status-page');
 
@@ -87,20 +90,43 @@ app.use((_req, res, next) => {
 app.use(setupGuard);
 
 // —— 后台页面鉴权 ——
-// /managers/* 下的所有 HTML 页面需要管理员登录才能访问
+// /managers/* 下的所有 HTML 页面需要后台管理者（admin/moderator）登录
+// 其中 /managers/users（用户与角色管理）仅全局管理员（admin）可进
 // 带扩展名的静态资源（CSS/JS/图片）放行，不包含敏感内容
 function requireAdminPage(req, res, next) {
   const token = req.cookies && req.cookies[COOKIE_NAME];
   const session = verify(token);
   if (session) {
     const user = db.prepare('SELECT role FROM users WHERE id = ?').get(session.userId);
-    if (user && user.role === 'admin') return next();
+    if (user) {
+      const isManager = user.role === 'admin' || user.role === 'moderator';
+      const isGlobal = user.role === 'admin';
+      // 注意：req.path 已被挂载前缀剥掉（'/'+mount 后为 '/users'），必须用 originalUrl 判断
+      const usersArea = req.originalUrl.startsWith('/managers/users');
+      const smtpArea = req.originalUrl.startsWith('/managers/smtp');
+      // 仅全局管理员才能进 /users 与 /smtp，其余后台区域 admin/moderator 都可
+      const restricted = (usersArea || smtpArea) && !isGlobal;
+      if (isManager && !restricted) return next();
+    }
   }
   // 仅放行明确的静态资源扩展名，避免 /managers/secret.txt 等绕过认证
   if (/\.(?:css|js|png|jpe?g|gif|svg|ico|woff2?|ttf|eot|map)$/i.test(req.path)) return next();
   return res.redirect('/login/');
 }
 app.use('/managers/', requireAdminPage);
+
+// —— 个人主页页面鉴权 ——
+// /me/* 任何已登录用户（含普通用户 user）可访问，未登录跳 /login/
+function requireLoginPage(req, res, next) {
+  const token = req.cookies && req.cookies[COOKIE_NAME];
+  const session = verify(token);
+  if (session) {
+    const user = db.prepare('SELECT 1 FROM users WHERE id = ?').get(session.userId);
+    if (user) return next();
+  }
+  return res.redirect('/login/');
+}
+app.use('/me/', requireLoginPage);
 
 // —— 健康检查端点（Docker HEALTHCHECK 使用） ——
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
@@ -112,6 +138,7 @@ app.use('/api/music', musicRoutes);     // 音乐管理（公开的 /active + �
 app.use('/api/data', require('./src/routes/status'));  // 实时状态上报与查询
 app.use('/api/stats', require('./src/routes/stats'));    // 访问统计
 app.use('/api/categories', require('./src/routes/categories'));  // 分类管理（列表/新建/重命名/删除）
+app.use('/api/messages', require('./src/routes/messages'));  // 留言板
 
 // —— 公开文章页（无需登录） ——
 
@@ -309,7 +336,7 @@ function notFoundPage(slug) {
 }
 
 // —— 静态文件托管 ——
-// public/ 目录包含 login、setup、managers 等后台页面
+// public/ 目录包含 login、setup、managers、me、register 等页面
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 根级资源：首页、图片、音频（显式列出，避免暴露 data/、node_modules/）
@@ -317,6 +344,13 @@ app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.use('/image', express.static(path.join(__dirname, 'image')));
 // 音频从 data/uploads/music 提供（与管理上传目录一致）
 app.use('/audio', express.static(MUSIC_DIR));
+// 头像从 data/uploads/avatars 提供（与上传目录一致）
+app.use('/avatar', express.static(AVATAR_DIR));
+// 个人主页 / 开放注册页 / SMTP 单独入口（仅管理员可达）
+app.use('/me', express.static(path.join(__dirname, 'public', 'me')));
+app.use('/register', express.static(path.join(__dirname, 'public', 'register')));
+app.use('/board', express.static(path.join(__dirname, 'public', 'board')));
+app.use('/managers/smtp', express.static(path.join(__dirname, 'public', 'managers', 'smtp')));
 
 // —— 兜底 404（所有路由未匹配时） ——
 app.use((_req, res) => {

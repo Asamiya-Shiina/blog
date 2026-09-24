@@ -18,8 +18,10 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.6.2",
+    "geoip-lite": "^2.0.3",
     "isomorphic-dompurify": "^3.22.0",
     "marked": "^18.0.9",
+    "nodemailer": "^10.0.10",
     "zod": "^4.4.3"
   }
 }
