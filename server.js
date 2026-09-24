@@ -135,7 +135,7 @@ function withCategories(rows) {
   return rows.map(r => ({ ...r, categories: map.get(r.id) || [] }));
 }
 
-// 列出至少含一篇已发布文章的分类（供前台筛选条展示，附已发布文章数）
+// 列出全部分类（含暂无已发布文章的分类），附已发布文章数
 function getPublicCategories() {
   return db.prepare(`
     SELECT c.id, c.name,
@@ -143,10 +143,6 @@ function getPublicCategories() {
        FROM post_categories pc JOIN posts p ON p.id = pc.post_id
        WHERE pc.category_id = c.id AND p.status = 'published') AS post_count
     FROM categories c
-    WHERE EXISTS (
-      SELECT 1 FROM post_categories pc JOIN posts p ON p.id = pc.post_id
-      WHERE pc.category_id = c.id AND p.status = 'published'
-    )
     ORDER BY c.name
   `).all();
 }

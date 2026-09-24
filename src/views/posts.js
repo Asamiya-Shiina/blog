@@ -78,7 +78,7 @@ const SHARED_HEAD = `
     }
     .post-card p { color: var(--muted); margin: 0; }
 
-    /* —— 分类标签 & 筛选条 —— */
+    /* —— 分类标签（卡片 / 详情页内） —— */
     .post-cats { margin-left: 10px; }
     .cat-tag {
       display: inline-block;
@@ -94,25 +94,80 @@ const SHARED_HEAD = `
       transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
     }
     .cat-tag:hover { color: var(--fg); border-color: var(--accent); }
-    .cat-strip {
+
+    /* —— 文章列表：左文章 + 右分类侧栏 —— */
+    .posts-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 200px;
+      gap: 44px;
+      align-items: start;
+    }
+    .posts-main { min-width: 0; }
+    .cat-side {
+      position: sticky;
+      top: 8px;
       display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin: 0 0 40px;
-      animation: fadeUp 0.7s 0.1s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+      flex-direction: column;
+      gap: 2px;
+      padding: 6px 0 0 18px;
+      border-left: 1px solid var(--line);
+      animation: fadeUp 0.9s 0.1s cubic-bezier(0.22, 0.61, 0.36, 1) both;
     }
-    .cat-filter {
-      padding: 6px 14px;
+    .cat-side h3 {
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-weight: 400;
       font-size: 13px;
+      letter-spacing: 0.12em;
       color: var(--muted);
-      background: rgba(255,255,255,0.6);
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      text-decoration: none;
-      transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+      margin: 0 0 10px;
     }
-    .cat-filter:hover { color: var(--fg); border-color: var(--accent); }
-    .cat-filter.is-active { color: #fff; background: var(--accent); border-color: var(--accent); }
+    .cat-side-link {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      font-size: 14px;
+      color: var(--fg);
+      border-radius: 8px;
+      text-decoration: none;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+    .cat-side-link:hover { background: rgba(0,0,0,0.04); }
+    .cat-side-link.is-active {
+      color: var(--accent);
+      background: rgba(59,130,246,0.1);
+      font-weight: 600;
+    }
+    .cat-count {
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+        @media (max-width: 560px) {
+      .posts-layout {
+        grid-template-columns: 1fr;
+        gap: 18px;
+      }
+      .cat-side {
+        position: static;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 0;
+        border-left: none;
+        margin-bottom: 10px;
+      }
+      .cat-side h3 { width: 100%; margin-bottom: 2px; }
+      .cat-side-link {
+        padding: 5px 12px;
+        font-size: 13px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+      }
+      .cat-side-link:hover { background: rgba(0,0,0,0.04); border-color: var(--accent); }
+      .cat-side-link.is-active { border-color: var(--accent); }
+    }
     .empty {
       text-align: center;
       color: var(--muted);
@@ -270,15 +325,17 @@ function categoryTags(list = []) {
     '</span>';
 }
 
-// 分类筛选条：渲染「全部 / 各分类」的胶囊导航，activeId 高亮当前分类
-function categoryStrip(categories = [], activeId = null) {
+// 分类侧栏：渲染「全部 / 各分类」的竖排导航，activeId 高亮当前分类
+// 所有分类都展示（含暂无文章的分类）；每个分类附文章总数，空分类计数为 0。
+// 桌面端为右侧独立侧栏，窄屏由 CSS 折成横排标签条（见 SHARED_HEAD）。
+function categorySidebar(categories = [], activeId = null) {
   if (!categories || categories.length === 0) return '';
-  // 首项为「全部」→ /posts/，其余指向各分类归档页
-  const items = [{ id: null, name: '全部' }, ...categories];
-  const link = items.map(c =>
-    `<a class="cat-filter${activeId === c.id ? ' is-active' : ''}" href="${c.id === null ? '/posts/' : '/category/' + c.id + '/'}">${escapeHtml(c.name)}</a>`
+  const total = categories.reduce((sum, c) => sum + (c.post_count || 0), 0);
+  const all = `<a class="cat-side-link${activeId === null ? ' is-active' : ''}" href="/posts/">全部<span class="cat-count">${total}</span></a>`;
+  const items = categories.map(c =>
+    `<a class="cat-side-link${activeId === c.id ? ' is-active' : ''}" href="/category/${c.id}/">${escapeHtml(c.name)}<span class="cat-count">${c.post_count || 0}</span></a>`
   ).join('');
-  return `<div class="cat-strip">${link}</div>`;
+  return `<aside class="cat-side"><h3>分类</h3>${all}${items}</aside>`;
 }
 
 // 单篇文章卡片（列表页 / 搜索页 / 分类页共用），meta 旁带分类标签
@@ -292,11 +349,15 @@ function renderCard(p) {
 }
 
 // 渲染文章列表页：卡片式布局，带入场动画
-// opts: { title, heading, subheading, categories, activeCategory }
+// opts: { title, heading, subheading, categories, activeCategory, emptyText }
 function renderListPage(posts, opts = {}) {
-  const { title = '文章', heading, subheading, categories = [], activeCategory = null } = opts;
+  const {
+    title = '文章', heading, subheading,
+    categories = [], activeCategory = null,
+    emptyText = '还没有发布的文章。',
+  } = opts;
   const cards = posts.length === 0
-    ? `<div class="empty">还没有发布的文章。</div>`
+    ? `<div class="empty">${escapeHtml(emptyText)}</div>`
     : posts.map(renderCard).join('');
 
   return `<!DOCTYPE html>
@@ -308,13 +369,15 @@ function renderListPage(posts, opts = {}) {
   ${SHARED_HEAD}
 </head>
 <body>
-  <main class="wrap">
+  <main class="wrap wide">
     <header class="hero">
       <h1>${escapeHtml(heading || '文章')}</h1>
       <p>${escapeHtml(subheading || '这里收录了我写过的所有已发布文章。')}</p>
     </header>
-    ${categoryStrip(categories, activeCategory)}
-    <section>${cards}</section>
+    <div class="posts-layout">
+      <section class="posts-main">${cards}</section>
+      ${categorySidebar(categories, activeCategory)}
+    </div>
   </main>
   ${renderSearchButton()}
   ${renderFloatingUI()}
@@ -322,7 +385,7 @@ function renderListPage(posts, opts = {}) {
 </html>`;
 }
 
-// 渲染分类归档页：某分类下的已发布文章，含分类筛选条
+// 渲染分类归档页：某分类下的已发布文章，含分类侧栏与空态提示
 function renderCategoryPage(category, posts, categories) {
   const name = category ? category.name : '分类';
   return renderListPage(posts, {
@@ -331,6 +394,7 @@ function renderCategoryPage(category, posts, categories) {
     subheading: `属于「${name}」分类的文章。`,
     categories,
     activeCategory: category ? category.id : null,
+    emptyText: '当前还没有文章。',
   });
 }
 
