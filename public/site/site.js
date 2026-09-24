@@ -147,13 +147,19 @@
   const bar   = document.querySelector('.player-progress');
   const titleEl = document.querySelector('.player-title');
   if (audio && btn) {
-    let pendingSeek = null;  // 刷新后恢复进度：等 loadedmetadata 就绪再跳转
+    // userWantsPlay：『用户是否在听』。自动暂停不会清零，只有手动暂停才清零，
+    // 从而站内跳转/回到前台时仍知道「用户想继续听」。
+    let userWantsPlay = false;
     btn.addEventListener('click', () => {
       if (!audio.src) return;  // 没有选中歌曲时不响应
       if (audio.paused) { userWantsPlay = true;  audio.play().catch(() => {}); }
-      else              { userWantsPlay = false; audio.pause(); }
+      else              { userWantsPlay = false; audio.pause(); setPausedFlag(true); }
     });
-    audio.addEventListener('play',  () => btn.classList.add('is-playing'));
+    audio.addEventListener('play', () => {
+      btn.classList.add('is-playing');
+      userWantsPlay = true;
+      setPausedFlag(false);           // 用户又开始听了，撤销「手动暂停过」
+    });
     audio.addEventListener('pause', () => btn.classList.remove('is-playing'));
 
     audio.addEventListener('timeupdate', () => {
@@ -163,48 +169,28 @@
     audio.addEventListener('loadedmetadata', () => {
       if (isFinite(audio.duration)) {
         bar.title = '0:00 / ' + format(audio.duration);
-        // 刷新后回到同一首歌时，恢复上次进度
-        if (pendingSeek != null) {
-          try { audio.currentTime = Math.min(pendingSeek, audio.duration || pendingSeek); } catch {}
-          pendingSeek = null;
-        }
       }
     });
 
-    // —— 播放续播（sessionStorage） ——
-    // 用 sessionStorage 而非 localStorage：同一浏览会话内（F5 刷新、站内跳转）
-    // 记住进度可续播；但关闭浏览器/页签即清空，重开时从新播放。
-    const STORE_KEY = 'playerState';
-    function savePlayerState(src, time, playing) {
+    // —— 手动暂停记录（Cookie，3 天） ——
+    // 只记一件事：用户上次是否手动按过暂停。记录了 3 天，期间再次访问就不自动播放；
+    // 用户重新点播放后撤销，过期自然失效。不记录歌曲/进度。
+    const PAUSED_COOKIE = 'playerPaused';
+    const PAUSED_MAX_AGE = 3 * 24 * 3600;   // 3 天
+    function setPausedFlag(paused) {
       try {
-        sessionStorage.setItem(STORE_KEY, JSON.stringify({ src, time: Math.floor(time || 0), playing: !!playing }));
+        if (paused) {
+          document.cookie = `${PAUSED_COOKIE}=1; path=/; max-age=${PAUSED_MAX_AGE}`;
+        } else {
+          document.cookie = `${PAUSED_COOKIE}=; path=/; max-age=0`;
+        }
       } catch {}
     }
-    function loadPlayerState() {
-      try {
-        const d = JSON.parse(sessionStorage.getItem(STORE_KEY) || 'null');
-        return d && d.src ? d : null;
-      } catch { return null; }
+    function hasPausedFlag() {
+      return document.cookie
+        .split(';')
+        .some(c => c.trim().startsWith(PAUSED_COOKIE + '='));
     }
-
-    // 周期性（约 1s）持久化进度与播放意图；播放/暂停时立即存；刷新或切后台前最终落盘。
-    // userWantsPlay 表示『用户是否在听』——自动暂停不会清零，只有手动暂停才清零，
-    // 这样站内跳转时下一页仍知道「用户想继续听」，从而自动续播。
-    let userWantsPlay = false;
-    let lastPersist = 0;
-    const persistNow = () => {
-      const src = audio.getAttribute('src');
-      if (src) savePlayerState(src, audio.currentTime, userWantsPlay);
-    };
-    audio.addEventListener('play',  () => { userWantsPlay = true; persistNow(); lastPersist = Date.now(); });
-    audio.addEventListener('pause', () => { persistNow(); lastPersist = Date.now(); });
-    audio.addEventListener('timeupdate', () => {
-      if (Date.now() - lastPersist > 1000) { lastPersist = Date.now(); persistNow(); }
-    });
-    window.addEventListener('pagehide', persistNow);          // 刷新/关闭前保存最终位置
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') persistNow();
-    });
     // 进度条只读：禁止点击/拖动跳转
     bar.addEventListener('click',     (e) => { e.preventDefault(); e.stopPropagation(); });
     bar.addEventListener('mousedown',  (e) => { e.preventDefault(); e.stopPropagation(); });
@@ -277,22 +263,14 @@
       window.addEventListener(evt, onUserGesture, { passive: true })
     );
 
-    // 首次加载：恢复上次进度，并按其之前的状态决定是否自动开播
+    // 首次加载：决定是否自动开播——只在『上次手动暂停过』时保持暂停
     function resumeLastPlayback(song) {
-      const state = loadPlayerState();
-      if (!song) return false;
-      // 无历史记录，或已经不是同一首歌 → 当作首次访问，尝试自动播放
-      if (!state || song.src !== state.src) return true;
-      // 同一首歌：准备跳回上次进度
-      pendingSeek = (isFinite(state.time) && state.time > 0) ? state.time : null;
-      // 之前是否在播，决定这次要不要接着自动播（否则保持暂停）
-      return !!state.playing;
+      if (!song) return false;          // 没有歌曲
+      return !hasPausedFlag();          // 上次手动暂停过则不开播（3 天内）
     }
     loadActiveSong().then((song) => {
       applySong(song);
-      // 以『是否该播放』的结论初始化播放意图：
-      // 首次访问/原本在听 → 想播（允许手势兜底自动开播）；
-      // 上一页手动暂停过 → 不想播（收起自动开播，除非用户主动点播放）。
+      // 上次手动暂停过 → 不自动播；否则尝试自动开播（手势兜底）
       userWantsPlay = resumeLastPlayback(song);
       if (userWantsPlay) tryAutoplay();
     });
