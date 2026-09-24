@@ -135,6 +135,11 @@ function withCategories(rows) {
   return rows.map(r => ({ ...r, categories: map.get(r.id) || [] }));
 }
 
+// 全站已发布文章总数：按文章（行）计数，跨分类不重复
+function countPublishedPosts() {
+  return db.prepare(`SELECT COUNT(*) AS n FROM posts WHERE status = 'published'`).get().n;
+}
+
 // 列出全部分类（含暂无已发布文章的分类），附已发布文章数
 function getPublicCategories() {
   return db.prepare(`
@@ -156,7 +161,7 @@ app.get(['/posts', '/posts/'], (_req, res) => {
     ORDER BY COALESCE(updated_at, created_at) DESC
   `).all();
   const posts = withCategories(rows).map(r => ({ ...r, published_at: r.updated_at }));
-  res.type('html').send(renderListPage(posts, { categories: getPublicCategories() }));
+  res.type('html').send(renderListPage(posts, { categories: getPublicCategories(), totalPosts: countPublishedPosts() }));
 });
 
 // 分类归档页：某分类下的已发布文章，含分类筛选条
@@ -174,7 +179,7 @@ app.get(['/category/:id', '/category/:id/'], (req, res) => {
     ORDER BY COALESCE(updated_at, created_at) DESC
   `).all(id);
   const posts = withCategories(rows).map(r => ({ ...r, published_at: r.updated_at }));
-  res.type('html').send(renderCategoryPage(category, posts, getPublicCategories()));
+  res.type('html').send(renderCategoryPage(category, posts, getPublicCategories(), countPublishedPosts()));
 });
 
 // 文章详情页：通过 slug 查找已发布文章，不存在返回 404

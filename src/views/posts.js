@@ -328,10 +328,10 @@ function categoryTags(list = []) {
 // 分类侧栏：渲染「全部 / 各分类」的竖排导航，activeId 高亮当前分类
 // 所有分类都展示（含暂无文章的分类）；每个分类附文章总数，空分类计数为 0。
 // 桌面端为右侧独立侧栏，窄屏由 CSS 折成横排标签条（见 SHARED_HEAD）。
-function categorySidebar(categories = [], activeId = null) {
+// totalPosts：全站去重后的已发布文章总数（按文章计数，跨分类不重复）
+function categorySidebar(categories = [], activeId = null, totalPosts = 0) {
   if (!categories || categories.length === 0) return '';
-  const total = categories.reduce((sum, c) => sum + (c.post_count || 0), 0);
-  const all = `<a class="cat-side-link${activeId === null ? ' is-active' : ''}" href="/posts/">全部<span class="cat-count">${total}</span></a>`;
+  const all = `<a class="cat-side-link${activeId === null ? ' is-active' : ''}" href="/posts/">全部<span class="cat-count">${totalPosts}</span></a>`;
   const items = categories.map(c =>
     `<a class="cat-side-link${activeId === c.id ? ' is-active' : ''}" href="/category/${c.id}/">${escapeHtml(c.name)}<span class="cat-count">${c.post_count || 0}</span></a>`
   ).join('');
@@ -354,6 +354,7 @@ function renderListPage(posts, opts = {}) {
   const {
     title = '文章', heading, subheading,
     categories = [], activeCategory = null,
+    totalPosts = 0,
     emptyText = '还没有发布的文章。',
   } = opts;
   const cards = posts.length === 0
@@ -376,7 +377,7 @@ function renderListPage(posts, opts = {}) {
     </header>
     <div class="posts-layout">
       <section class="posts-main">${cards}</section>
-      ${categorySidebar(categories, activeCategory)}
+      ${categorySidebar(categories, activeCategory, totalPosts)}
     </div>
   </main>
   ${renderSearchButton()}
@@ -386,7 +387,7 @@ function renderListPage(posts, opts = {}) {
 }
 
 // 渲染分类归档页：某分类下的已发布文章，含分类侧栏与空态提示
-function renderCategoryPage(category, posts, categories) {
+function renderCategoryPage(category, posts, categories, totalPosts = 0) {
   const name = category ? category.name : '分类';
   return renderListPage(posts, {
     title: name,
@@ -394,6 +395,7 @@ function renderCategoryPage(category, posts, categories) {
     subheading: `属于「${name}」分类的文章。`,
     categories,
     activeCategory: category ? category.id : null,
+    totalPosts,
     emptyText: '当前还没有文章。',
   });
 }
