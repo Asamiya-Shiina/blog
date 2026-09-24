@@ -121,9 +121,14 @@ class HttpClient:
         self.session.headers.update({"User-Agent": "BlogStatusClient/1.0"})
 
     def request(self, method, path, data=None, as_form=False):
-        url = self.server + path
+        # 用户输入里常漏掉 scheme（"localhost:3000" 没有 http://），requests 会报
+        # "No connection adapters..."，这里兜底补 http://
+        base = self.server.rstrip("/")
+        if base and not base.startswith(("http://", "https://")):
+            base = "http://" + base
+        url = base + path
         # 显式带 Referer/Origin，迎合部分启用了严格同源校验的部署
-        headers = {"Referer": self.server + "/", "Origin": self.server}
+        headers = {"Referer": base + "/", "Origin": base}
         try:
             # 按是否传 body、以及是否用表单格式，选不同的编码方式发给 requests
             if as_form and data:
@@ -199,6 +204,15 @@ class StatusClient:
         self.http.server = server.rstrip("/")
         pw_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
         self.http.request("POST", "/api/login", {"username": username, "password_hash": pw_hash})
+        # 状态客户端只允许全局管理员（role=admin）使用，
+        # 普通用户 / moderator 就算登录成功也拒掉，避免污染 sid 会话
+        me = self.http.request("GET", "/api/me")
+        if me.get("role") != "admin":
+            try:
+                self.http.request("POST", "/api/logout")
+            except Exception:
+                pass
+            raise Exception("此客户端仅限全局管理员（admin）使用")
         self.logged_in = True
 
     def fetch_config(self):
@@ -452,8 +466,12 @@ class StatusGUI:
         self.login_btn = ttk.Button(self.login_frame, text="登录", command=self.do_login)
         self.login_btn.pack(fill="x")
 
-        self.login_error = ttk.Label(self.login_frame, text="", foreground="red")
-        self.login_error.pack(pady=(10, 0))
+        # 多行报错区：完整堆栈太长时单行 Label 会被截，用 Text 让用户能滚动/选中复制
+        self.login_error = tk.Text(self.login_frame, height=5, wrap="word",
+                                   foreground="red", borderwidth=0,
+                                   background=self.root.cget("bg"))
+        self.login_error.pack(fill="x", pady=(10, 0))
+        self._set_login_error("")
 
         saved = self.client.saved_config
         if saved.get("server"):
@@ -502,6 +520,13 @@ class StatusGUI:
         self.status_frame.pack(fill="both", expand=True, padx=20, pady=20)
         self.update_status_display()
 
+    def _set_login_error(self, msg):
+        self.login_error.config(state="normal")
+        self.login_error.delete("1.0", "end")
+        if msg:
+            self.login_error.insert("1.0", msg)
+        self.login_error.config(state="disabled")
+
     def auto_login(self):
         saved = self.client.saved_config
         try:
@@ -511,7 +536,7 @@ class StatusGUI:
             self.start_background_loop()
         except Exception as e:
             self.show_login_view()
-            self.login_error.config(text=f"自动登录失败: {e}")
+            self._set_login_error(f"自动登录失败: {e}")
 
     def do_login(self):
         server = self.server_entry.get().strip().rstrip("/")
@@ -519,7 +544,7 @@ class StatusGUI:
         password = self.password_entry.get()
 
         if not server or not username or not password:
-            self.login_error.config(text="请填写所有字段")
+            self._set_login_error("请填写所有字段")
             return
 
         try:
@@ -534,9 +559,9 @@ class StatusGUI:
 
             self.show_status_view()
             self.start_background_loop()
-            self.login_error.config(text="")
+            self._set_login_error("")
         except Exception as e:
-            self.login_error.config(text=f"登录失败: {e}")
+            self._set_login_error(f"登录失败: {e}")
 
     def save_device_name(self):
         name = self.device_name_entry.get().strip()
