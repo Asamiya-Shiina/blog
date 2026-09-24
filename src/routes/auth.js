@@ -177,20 +177,9 @@ router.get('/setup-status', (_req, res) => {
 
 // POST /api/setup：创建首个管理员账号
 // 只有在没有任何用户时才能调用，防止被恶意创建管理员
-// 如果 .env 里设置了 SETUP_TOKEN，调用时必须通过 X-Setup-Token 头带上，
-// 否则返回 403。这是为了在生产环境（特别是首次部署时）防止被网络嗅探抢注
 router.post('/setup', setupLimiter, async (req, res) => {
   if (db.userCount() !== 0) {
     return res.status(409).json({ error: 'setup already done' });
-  }
-  const expected = process.env.SETUP_TOKEN;
-  if (expected) {
-    const got = req.get('X-Setup-Token');
-    // timingSafeEqual 长度不匹配会抛 RangeError，必须先比长度
-    if (!got || got.length !== expected.length ||
-        !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected))) {
-      return res.status(403).json({ error: 'invalid setup token' });
-    }
   }
   const parsed = userCreateSchema.safeParse(req.body);
   if (!parsed.success) {
