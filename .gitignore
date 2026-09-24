@@ -19,3 +19,5 @@ docker-compose.override.yml
 client/build/
 client/dist/
 client/*.spec
+# JetBrains IDE
+.idea/
