@@ -1,32 +1,34 @@
 # Asamiya Shiina's Blog
 
-一个轻量、自托管的个人博客系统，带后台管理面板。无构建步骤，无前端框架，开箱即用。
+轻量、自托管的个人博客。Express 5 + SQLite，原生 HTML/CSS/JS（无构建步骤），单镜像即跑。
 
 ## 功能
 
 **前台**
-- 首页：个人介绍、技能展示、实时状态卡片、联系方式
-- 文章列表与详情页（服务端渲染）
-- 文章搜索（带限流防刷）
-- 实时状态页（SSE 推送，多设备支持）
-- Markdown 渲染（支持 GFM）
-- 可拖拽的音乐播放器
+- 首页（`/`）：个人介绍、技能树、联系方式
+- 文章列表 / 详情 / 搜索 / 分类归档（服务端渲染，Markdown + GFM）
+- 实时状态页（`/status`）：SSE 推送，多设备实时显示当前窗口
+- 留言板（`/board`）：嵌套回复、头像、IP 属地
+- 可拖拽音乐播放器（管理员可在后台切歌）
 
-**后台管理** (`/managers/`)
-- 仪表盘：文章统计、快捷操作
-- 文章管理：分页列表、搜索、状态筛选（草稿/已发布）
-- Markdown 编辑器：分栏实时预览
-- 用户管理：创建账号、重置密码、删除用户
-- 状态配置：黑名单、应用名映射、标题显示规则
-- 音乐管理：上传/删除音频文件、选择当前播放歌曲（前台播放器自动同步）
+**后台**（`/managers/`，admin / moderator）
+- 仪表盘、文章 CRUD（含分栏 Markdown 实时预览）、分类管理
+- 用户管理、SMTP 配置（仅全局管理员 admin）
+- 音乐管理、实时状态配置（黑名单 / 应用名映射 / 标题规则）
+
+**个人主页**（`/me/`，任意已登录用户）
+- 头像上传（带校验）、名字、签名
+
+**开放注册**（`/register`）
+- 滑块验证 + 邮箱验证（站点配置 SMTP 时启用；未配置则直接激活）
 
 **安全**
-- HMAC-SHA256 Session 认证（httpOnly Cookie，30 天有效期）
-- bcrypt 密码哈希（cost 12）
-- Zod 请求校验 + DOMPurify HTML 消毒
-- 登录/注册/写入/搜索速率限制
-- 安全响应头（X-Content-Type-Options、X-Frame-Options 等）
-- 防用户名枚举
+- HMAC-SHA256 Session（httpOnly Cookie，1 年有效期；改密码 / 删用户自动吊销旧 token）
+- bcrypt 哈希（cost 12，前端先 SHA-256 解决 72 字节限制）
+- Zod 校验 + DOMPurify HTML 消毒
+- 登录 / 注册 / 写入 / 搜索 / Setup 全链路速率限制
+- CSP / HSTS / nosniff / X-Frame-Options / Permissions-Policy
+- 防用户名枚举、密码强度统一错误消息
 
 ## 技术栈
 
@@ -34,16 +36,17 @@
 |---|---|
 | 运行时 | Node.js 24 |
 | 框架 | Express 5 |
-| 数据库 | SQLite（better-sqlite3，WAL 模式） |
+| 数据库 | SQLite（better-sqlite3，WAL + 外键） |
 | 认证 | HMAC-SHA256 + bcrypt |
-| 校验 | Zod |
+| 校验 / 消毒 | Zod + DOMPurify |
 | Markdown | marked |
+| 邮件 | nodemailer |
 | 前端 | 原生 HTML/CSS/JS，无构建步骤 |
-| 部署 | Docker + GitHub Actions → ghcr.io |
+| 部署 | Docker（read-only + gosu 降权） → ghcr.io |
 
 ## 快速开始
 
-### Docker 部署（推荐）
+### Docker（推荐）
 
 ```yaml
 # docker-compose.yml
@@ -61,71 +64,87 @@ services:
 docker compose up -d
 ```
 
-首次访问会引导你创建管理员账号。`SESSION_SECRET` 会在容器启动时自动生成并持久化到 `data/.session-secret`。
+首次访问 `http://localhost:3000` 会被引导到 `/setup/`，填写用户名和密码即可创建全局管理员账号。`SESSION_SECRET` 会在容器启动时自动生成并持久化到 `data/.session-secret`（重启容器不丢）。
 
 ### 本地开发
 
 ```bash
-# 要求 Node.js >= 24
 git clone git@github.com:Asamiya-Shiina/blog.git
 cd blog
 npm install
 
-# 创建 .env
 echo "SESSION_SECRET=$(openssl rand -hex 32)" > .env
 
-# 开发模式（文件变更自动重启）
+# 文件变更自动重启
 npm run dev
-
-# 生产模式
+# 或生产模式
 npm start
 ```
 
-访问 `http://localhost:3000` 开始使用。
+访问 `http://localhost:3000`。
 
 ## 环境变量
 
-| 变量 | 必填 | 默认值 | 说明 |
+| 变量 | 必填 | 默认 | 说明 |
 |---|---|---|---|
-| `SESSION_SECRET` | 是 | Docker 自动生成 | Session 签名密钥 |
+| `SESSION_SECRET` | Docker 自动生成 | — | Session 签名密钥；丢失会吊销所有已签发 token |
 | `PORT` | 否 | `3000` | 监听端口 |
-| `DB_PATH` | 否 | `./data/blog.sqlite` | 数据库文件路径 |
-| `COOKIE_SECURE` | 否 | `false` | 设为 `true` 以启用 Secure Cookie（HTTPS 环境） |
+| `DB_PATH` | 否 | `./data/blog.sqlite` | SQLite 文件路径 |
+| `COOKIE_SECURE` | 否 | `false` | HTTPS 环境设为 `true`（Cookie 加 Secure 标志） |
+| `TRUST_PROXY` | 否 | `false` | 反代层数（`true` / `false` / 数字 / `loopback`）；裸跑保持默认 |
+| `NODE_ENV` | 否 | — | `production` 时错误响应只输出消息 |
 
 ## 项目结构
 
 ```
-├── server.js              # Express 入口
+├── server.js                       # Express 入口（中间件、路由、监听）
+├── docker-entrypoint.sh            # 容器入口：权限修复 + 密钥管理 + gosu 降权
+├── index.html                      # 首页
+├── image/                          # 前台静态图片
 ├── src/
-│   ├── db.js              # SQLite 初始化与 Schema
-│   ├── auth.js            # 认证逻辑（Session、密码、中间件）
-│   ├── status-store.js    # 实时状态内存存储 + SSE 广播
+│   ├── db.js                       # SQLite 初始化、建表、迁移
+│   ├── auth.js                     # Session 签发 / 校验、密码哈希
+│   ├── audit.js                    # 审计日志
+│   ├── captcha.js                  # 滑块验证
+│   ├── crypto-box.js               # 加密工具
+│   ├── ip.js                       # IP 解析 + GeoIP 属地
+│   ├── mailer.js                   # SMTP 配置 + 邮件发送
+│   ├── status-store.js             # 实时状态内存存储 + SSE 广播
 │   ├── routes/
-│   │   ├── auth.js        # 认证 API（登录、注册、用户管理）
-│   │   ├── posts.js       # 文章 API（CRUD、预览）
-│   │   ├── music.js       # 音乐 API（上传、列表、设为当前播放）
-│   │   └── status.js      # 状态 API（上报、配置、SSE 流）
-│   └── views/
-│       ├── posts.js       # 前台页面服务端渲染
-│       └── status-page.js # 状态详情页渲染
+│   │   ├── auth.js                 # 登录、注册、用户管理、首次设置
+│   │   ├── posts.js                # 文章 CRUD
+│   │   ├── music.js                # 音乐管理 + 当前播放
+│   │   ├── status.js               # 状态上报 / 配置 / SSE
+│   │   ├── stats.js                # 访问统计
+│   │   ├── categories.js           # 分类管理
+│   │   └── messages.js             # 留言板
+│   └── views/                      # 服务端渲染（无模板引擎，原生字符串拼接）
+│       ├── posts.js
+│       └── status-page.js
 ├── public/
-│   ├── managers/          # 后台管理面板
-│   ├── login/             # 登录页
-│   ├── setup/             # 初始化设置页
-│   └── site/              # 前台公共样式与脚本
-├── client/
-│   ├── status_client.py   # Windows 状态上报客户端源码
-│   └── 状态客户端.spec     # PyInstaller 打包配置
-├── index.html             # 首页
-├── Dockerfile
-├── docker-compose.yml
-└── docker-entrypoint.sh   # 容器入口（权限修复、密钥管理、降权运行）
+│   ├── login/    setup/    register/    me/    board/
+│   ├── managers/                        # 后台管理面板（含 smtp 子页）
+│   └── site/                            # 前台公共样式与脚本
+├── client/                             # Windows 状态上报客户端（PyInstaller 打包）
+│   ├── status_client.py
+│   └── 状态客户端.spec
+└── data/                               # 运行时数据（volume 挂载）
+    ├── blog.sqlite
+    ├── .session-secret
+    └── uploads/{music,avatars}/
 ```
+
+## 部署细节
+
+- 镜像以非 root 用户 `blog` 运行（`read_only: true`，仅 `/tmp` 与 `/app/data` 可写）
+- `docker-entrypoint.sh` 处理 volume 权限、`SESSION_SECRET` 持久化、用 `gosu` 降权
+- 首次启动会自动建库、迁移、写入默认状态配置
+- 任何请求在「无管理员」时统一重定向到 `/setup/`
 
 ## CI/CD
 
-推送到 `main` 分支后，GitHub Actions 自动构建 Docker 镜像并推送到 `ghcr.io/asamiya-shiina/blog`，标签为 `latest` 和 commit SHA。
+推送 `main` 后，GitHub Actions 自动构建镜像并推送到 `ghcr.io/asamiya-shiina/blog`，标签 `latest` 与 commit SHA。
 
 ## License
 
-MIT
+ISC
