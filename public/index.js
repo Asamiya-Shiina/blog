@@ -33,6 +33,8 @@
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (u) {
       if (!u) return;
+      // 全局管理员头像 → 后台；其他角色 → 个人主页
+      avatar.href = u.role === 'admin' ? '/managers/' : '/me/';
       var initial = (u.username || '?').trim().charAt(0).toUpperCase();
       if (u.avatar_url) {
         img.src = u.avatar_url;
