@@ -22,7 +22,9 @@ marked.setOptions({ gfm: true, breaks: true });
 // Markdown → HTML，经过 DOMPurify 消毒防止 XSS
 function renderHtml(md) {
   const raw = marked.parse(md || '');
-  return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
+  // 禁掉 style 属性：DOMPurify 默认保留内联样式，允许 CSS 注入（外带/涂改页面）。
+  // 全站 CSP 的 style-src-attr 'none' 已经兜底，显式禁用更保险。
+  return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true }, FORBID_ATTR: ['style'] });
 }
 
 // 生成 URL 友好的 slug：小写、连字符分隔、去除特殊字符

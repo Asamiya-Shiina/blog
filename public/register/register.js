@@ -20,6 +20,8 @@
   let captcha = null;
   let dragging = false;
   let verifiedX = null;
+  let verifiedTrace = null; // 验证通过时的拖动轨迹（发给后端做反脚本校验）
+  let dragTrace = [];       // 当前这次拖拽实时采集的采样点 {x, t}
 
   const showErr = (m) => { err.textContent = m; err.classList.add('is-visible'); };
   const hideErr = () => err.classList.remove('is-visible');
@@ -46,6 +48,8 @@
     handle.style.width = handleW + 'px';
     const maxLeft = trackW - handleW;
     verifiedX = null;
+    verifiedTrace = null;
+    dragTrace = [];
     label.className = 'captcha-label';
     label.textContent = '安全验证：把滑块拖到缺口位置';
     handle.classList.remove('verified', 'invalid');
@@ -57,10 +61,16 @@
       let pos = clientX - rect.left - handleW / 2;
       pos = Math.max(0, Math.min(maxLeft, pos));
       handle.style.left = pos + 'px';
+      // 采集拖动轨迹（captcha 坐标系，供后端校验这是一次真实拖拽而非脚本）
+      const t = Date.now();
+      const last = dragTrace[dragTrace.length - 1];
+      // 同一毫秒触发的连续 move 事件去重，保证服务端「时间严格递增」判定不误伤
+      if (!last || t > last.t) dragTrace.push({ x: pos / scale, t });
     };
 
     handle.addEventListener('pointerdown', (e) => {
       dragging = true;
+      dragTrace = [];
       handle.classList.add('dragging');
       handle.setPointerCapture(e.pointerId);
     });
@@ -76,6 +86,7 @@
       const pos = parseFloat(handle.style.left) || 0;
       if (Math.abs(pos - notchX) <= 14) {
         verifiedX = pos / scale;
+        verifiedTrace = dragTrace.length ? dragTrace.slice() : [{ x: verifiedX, t: Date.now() }];
         label.textContent = '验证成功';
         label.classList.add('ok');
         handle.classList.add('verified');
@@ -114,7 +125,7 @@
       const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password_hash, captcha_token: captcha.token, captcha_x: verifiedX }),
+        body: JSON.stringify({ username, email, password_hash, captcha_token: captcha.token, captcha_x: verifiedX, captcha_track: verifiedTrace }),
       });
       if (res.status === 201) {
         const data = await res.json();

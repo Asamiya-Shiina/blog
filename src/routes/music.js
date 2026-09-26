@@ -53,17 +53,20 @@ const writeLimiter = rateLimit({
 });
 
 // 数据库行 → 歌曲对象
-function rowToSong(row) {
+// withOriginal=true 才带上 original_name（原始上传文件名，仅给管理员看）；
+// 公开接口不泄露该字段，避免把站主本地的原始文件名暴露给匿名访客。
+function rowToSong(row, withOriginal = false) {
   if (!row) return null;
-  return {
+  const song = {
     id: row.id,
     title: row.title,
-    original_name: row.original_name,
     mime: row.mime,
     size_bytes: row.size_bytes,
     src: `/audio/${encodeURIComponent(row.filename)}`,
     created_at: row.created_at,
   };
+  if (withOriginal) song.original_name = row.original_name;
+  return song;
 }
 
 // 取当前激活的歌曲（公开）
@@ -72,7 +75,8 @@ router.get('/active', (_req, res) => {
   if (!setting || !setting.active_id) return res.json({ song: null });
   const row = db.prepare('SELECT * FROM music WHERE id = ?').get(setting.active_id);
   if (!row) return res.json({ song: null });
-  res.json({ song: rowToSong(row) });
+  // 公开播放器不给 original_name（原始文件名属站主隐私）
+  res.json({ song: rowToSong(row, false) });
 });
 
 // 列出所有歌曲（需登录）
@@ -81,7 +85,7 @@ router.get('/', requireManager, (_req, res) => {
   const setting = db.prepare('SELECT active_id FROM music_settings WHERE id = 1').get();
   const activeId = setting ? setting.active_id : null;
   res.json({
-    items: rows.map(r => ({ ...rowToSong(r), is_active: r.id === activeId })),
+    items: rows.map(r => ({ ...rowToSong(r, true), is_active: r.id === activeId })),
   });
 });
 
@@ -156,7 +160,7 @@ router.post('/', requireManager, writeLimiter, async (req, res) => {
     return res.status(500).json({ error: 'failed to save record' });
   }
 
-  res.status(201).json({ song: rowToSong(row) });
+  res.status(201).json({ song: rowToSong(row, true) });
 });
 
 // 设置当前播放歌曲（管理员）

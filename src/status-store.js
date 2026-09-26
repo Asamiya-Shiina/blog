@@ -38,8 +38,11 @@ function getPublicStatus(viewer) {
       const sep = id.lastIndexOf('_');
       const username = sep > 0 ? id.slice(0, sep) : id;
       const deviceName = sep > 0 ? id.slice(sep + 1) : '';
+      // 匿名访客拿到的 id 里也去掉了用户名前缀（只留 deviceName），防止通过 key 枚举在线用户名。
+      // 前台 status-client.js / site.js 优先用独立的 deviceName 字段，id 仅作兼容回退。
+      const exposedId = showUsername ? id : deviceName;
       activeDevices.push({
-        id,                       // 内部 id（保持兼容：前台 site.js 用 deviceName 时按 lastIndexOf 解析）
+        id: exposedId,
         username: showUsername ? username : 'anonymous',
         deviceName,               // 设备名（用户自愿公开）
         app: device.app,

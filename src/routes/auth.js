@@ -177,6 +177,8 @@ const registerSchema = z.object({
   email: z.string().trim().toLowerCase().max(254).refine(v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), { message: 'invalid email' }),
   captcha_token: z.string().min(1).max(64),
   captcha_x: z.number().finite(),
+  // 拖动轨迹：可选字段，缺失/格式错误都会在 captcha.verify 里被判负，不靠这里做强约束
+  captcha_track: z.array(z.object({ x: z.number().finite(), t: z.number().finite() })).optional(),
 }).refine(d => d.password || d.password_hash, { message: 'password required' });
 
 // 占位哈希：用户不存在时用这个做 bcrypt 比较
@@ -229,7 +231,7 @@ router.get('/captcha', captchaLimiter, (req, res) => {
 router.post('/register', writeLimiter, emailRegisterLimiter, async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid request' });
-  const { username, password, password_hash, email, captcha_token, captcha_x } = parsed.data;
+  const { username, password, password_hash, email, captcha_token, captcha_x, captcha_track } = parsed.data;
 
   // 站点已初始化才开放注册；首个账户仍走 /setup
   if (db.userCount() === 0) return res.status(409).json({ error: 'setup required' });
@@ -237,7 +239,7 @@ router.post('/register', writeLimiter, emailRegisterLimiter, async (req, res) =>
   if (!emailPolicy.isDomainAllowed(email)) {
     return res.status(400).json({ error: '请使用主流个人邮箱（Gmail / QQ / Outlook / 163 等）' });
   }
-  if (!captcha.verify(captcha_token, captcha_x, req)) return res.status(400).json({ error: 'captcha failed' });
+  if (!captcha.verify(captcha_token, captcha_x, captcha_track, req)) return res.status(400).json({ error: 'captcha failed' });
 
   const pw = password_hash || password;
   const preHashed = !!password_hash;
@@ -267,7 +269,9 @@ router.post('/register', writeLimiter, emailRegisterLimiter, async (req, res) =>
       const verifyExpires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       user = await createUser({ username, password: pw, preHashed, role: 'user', email, status: 'pending', verifyToken, verifyExpires });
       const result = await mailer.sendVerifyEmail(verifyToken, email, username);
-      if (!result.sent) {
+      if (!result.sent && process.env.NODE_ENV !== 'production') {
+        // 仅在非生产环境把激活链接打到日志（开发时 SMTP 未配置也能激活），
+        // 生产环境不输出 token，避免验证令牌泄露给日志读取者
         console.log(`[dev] verify link for ${email}: /api/verify?token=${verifyToken}`);
       }
     } else {
