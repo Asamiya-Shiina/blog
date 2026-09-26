@@ -193,8 +193,10 @@ if (!userCols.includes('email')) {
     `);
   })();
   db.exec(`PRAGMA foreign_keys = ON`);
-  // 重建了 users 表，行数可能变，让缓存下次重新查
-  invalidateUserCount();
+  // 注意：不要在这里调用 invalidateUserCount()——
+  // 该函数会访问 let 声明的 _userCountCache，而迁移代码位于其声明之前，
+  // 会在冷启动（旧库缺 email 列）时触发 TDZ: Cannot access before initialization。
+  // 此时缓存尚未被任何查询填充（本就为 null），invalidate 也是空操作，故直接省略。
 }
 
 // 保证 email 索引存在（全新库或迁移后都成立）
