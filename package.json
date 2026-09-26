@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch-path=./src --watch-path=server.js server.js"
   },
   "keywords": [],
   "author": "",
