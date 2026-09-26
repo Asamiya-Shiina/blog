@@ -80,9 +80,14 @@ router.get('/', (req, res) => {
   res.json({ messages: tops });
 });
 
+// 过滤零宽字符、控制字符（除常见换行/制表外），防止混淆内容、绕过审核、攻击显示
+// 覆盖：零宽空格/连字/不连字/连接符/从左/从右/双向控制符、BOM、ASCII 控制符 (除 \t\n)
+const FORBIDDEN_CONTENT = /[\u200B-\u200F\u2028-\u202F\u205F-\u206F\uFEFF\u202A-\u202E\u2066-\u2069\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
+
 // POST /api/messages：新建或回复
 const createSchema = z.object({
-  content: z.string().trim().min(1).max(2000),
+  content: z.string().trim().min(1).max(2000)
+    .refine(s => !FORBIDDEN_CONTENT.test(s), { message: 'content contains forbidden control characters' }),
   parent_id: z.number().int().positive().optional().nullable(),
 });
 
@@ -93,7 +98,7 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
   }
 
   const parsed = createSchema.safeParse(req.body || {});
-  if (!parsed.success) return res.status(400).json({ error: 'invalid request' });
+  if (!parsed.success) return res.status(400).json({ error: 'invalid request', detail: parsed.error.issues });
 
   // 回复目标必须存在且不能套娃（回复的回复也只挂顶层，避免无限嵌套）
   if (parsed.data.parent_id) {
