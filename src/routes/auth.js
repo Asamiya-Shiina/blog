@@ -216,9 +216,10 @@ router.post('/setup', setupLimiter, async (req, res) => {
 
 // GET /api/captcha：生成滑块验证数据（public）
 // 返回 { token, targetX, width, sliderWidth }，前端据此画缺口并校验拖拽
-router.get('/captcha', captchaLimiter, (_req, res) => {
+// token 内部绑定当前请求 IP，verify 必须同一 IP 提交，防跨机器刷
+router.get('/captcha', captchaLimiter, (req, res) => {
   captcha.sweep();
-  res.json(captcha.create());
+  res.json(captcha.create(req));
 });
 
 // POST /api/register：公开注册，新用户默认为普通用户（user）
@@ -236,7 +237,7 @@ router.post('/register', writeLimiter, emailRegisterLimiter, async (req, res) =>
   if (!emailPolicy.isDomainAllowed(email)) {
     return res.status(400).json({ error: '请使用主流个人邮箱（Gmail / QQ / Outlook / 163 等）' });
   }
-  if (!captcha.verify(captcha_token, captcha_x)) return res.status(400).json({ error: 'captcha failed' });
+  if (!captcha.verify(captcha_token, captcha_x, req)) return res.status(400).json({ error: 'captcha failed' });
 
   const pw = password_hash || password;
   const preHashed = !!password_hash;
@@ -368,6 +369,27 @@ router.get('/verify', (req, res) => {
   </main>
 </body></html>`);
   };
+  // Referer/Origin 校验：防止恶意站点用 <img src=".../api/verify?token=xxx">
+  // 嵌入网页/邮件，诱导用户访问触发激活。
+  // 邮件客户端通常 Referer 为空（直接打开），而浏览器访问自己博客时 Referer 同站或为空。
+  // 仅当 Referer 存在且不指向本站时拒绝（邮件客户端场景兼容）。
+  const ref = req.headers.referer || req.headers.origin;
+  if (ref) {
+    try {
+      const refUrl = new URL(ref);
+      const host = (req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+      const baseHost = (process.env.SITE_URL ? new URL(process.env.SITE_URL).host : host);
+      if (baseHost && refUrl.host !== baseHost) {
+        return renderPage({
+          status: 400, title: '验证失败',
+          heading: '请求来源异常',
+          message: '该验证链接来自一个不被信任的页面。请手动复制邮件中的完整链接到浏览器地址栏访问。',
+          link: '/login/', linkText: '去登录',
+        });
+      }
+    } catch { /* Referer 解析失败按通过处理，不影响真实用户 */ }
+  }
+
   const token = typeof req.query.token === 'string' ? req.query.token.trim() : '';
   if (!token) return renderPage({
     status: 400, title: '验证失败',
@@ -428,7 +450,9 @@ router.post('/login', loginLimiter, async (req, res) => {
     return res.status(409).json({ error: 'email not verified' });
   }
 
-  // 登录成功，签发 session cookie
+  // 登录成功：先清掉旧 cookie 再签发新的，防 Session Fixation
+  // （攻击者在公共电脑预设 cookie，等用户登录后继续使用旧 cookie）
+  clearSessionCookie(res);
   setSessionCookie(req, res, user.id);
   audit.log({ actorId: user.id, targetId: user.id, action: 'user.login', detail: { username } });
   res.status(204).end();

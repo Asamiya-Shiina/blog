@@ -15,24 +15,35 @@ const SLIDER_W = 52;           // 滑块/缺口宽(px)
 const MIN_X = 20;
 const MAX_X = WIDTH - SLIDER_W - 20;
 
-const store = new Map();       // token -> { targetX, expiresAt }
+const store = new Map();       // token -> { targetX, ip, expiresAt }
 
-function create() {
+// 从 req.ip（已经是 X-Forwarded-For 解析后的最终 IP）抽出 IP 字符串
+// 注意：必须和 verify 调用方传入的 IP 用同一份提取逻辑，否则绑不上
+function ipOf(req) {
+  return (req && (req.ip || (req.socket && req.socket.remoteAddress))) || '';
+}
+
+// 创建：生成 token 与目标坐标，并把发起请求的 IP 绑定到 token
+// 后续 verify 必须在同一 IP 上提交，否则直接失败——防止「A 机器解一次、B 机器提交」
+function create(req) {
   // 用 CSPRNG 而不是 Math.random()：Math.random 的输出可预测，
   // 攻击者拿到几张目标图后能推断下一个 token 的位置
   const targetX = crypto.randomInt(MIN_X, MAX_X);
   const token = crypto.randomUUID();
-  store.set(token, { targetX, expiresAt: Date.now() + TTL_MS });
+  store.set(token, { targetX, ip: ipOf(req), expiresAt: Date.now() + TTL_MS });
   return { token, targetX, width: WIDTH, sliderWidth: SLIDER_W };
 }
 
-// 校验:一次性消费(无论对错都销毁),过期/不存在/超出容差都失败
-function verify(token, submittedX) {
+// 校验:一次性消费(无论对错都销毁),过期/不存在/IP 不匹配/超出容差都失败
+function verify(token, submittedX, req) {
   if (!token || typeof token !== 'string') return false;
   const entry = store.get(token);
   store.delete(token);
   if (!entry) return false;
   if (Date.now() > entry.expiresAt) return false;
+  // IP 绑定校验：解 captcha 的 IP 跟提交时的 IP 必须一致
+  const submitIp = ipOf(req);
+  if (entry.ip && submitIp && entry.ip !== submitIp) return false;
   const x = Number(submittedX);
   if (!Number.isFinite(x)) return false;
   return Math.abs(x - entry.targetX) <= TOLERANCE;
