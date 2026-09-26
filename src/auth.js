@@ -200,6 +200,22 @@ function requireAuth(req, res, next) {
   next();
 }
 
+// optionalAuth: 尝试解析 session，挂载到 req.user；失败不阻断请求
+// 用于公开但有「个性化」输出的端点（如 /api/data 公开版）
+// 不命中时 req.user 为 undefined
+function optionalAuth(req, _res, next) {
+  try {
+    const token = req.cookies && req.cookies[COOKIE_NAME];
+    const session = verify(token);
+    if (!session) return next();
+    const user = getUserById(session.userId);
+    if (user && session.iat >= (user.tokens_valid_after || 0)) {
+      req.user = user;
+    }
+  } catch { /* 静默失败，不影响公开访问 */ }
+  next();
+}
+
 // requireAdmin: 仅全局管理员（admin）可通过
 // 内部先跑 requireAuth（避免调用方漏链导致 req.user 为空时直接放过）
 function requireAdmin(req, res, next) {
@@ -225,6 +241,7 @@ module.exports = {
   setSessionCookie,
   clearSessionCookie,
   requireAuth,
+  optionalAuth,
   requireAdmin,
   requireManager,
   verify,

@@ -35,7 +35,7 @@ const audit = require('./src/audit');
 const authRoutes = require('./src/routes/auth');
 const postsRoutes = require('./src/routes/posts');
 const musicRoutes = require('./src/routes/music');
-const { verify, COOKIE_NAME } = require('./src/auth');
+const { verify, COOKIE_NAME, optionalAuth } = require('./src/auth');
 
 // 音乐上传目录：与 src/routes/music.js 保持一致
 const MUSIC_DIR = path.join(__dirname, 'data', 'uploads', 'music');
@@ -90,11 +90,15 @@ app.use((_req, res, next) => {
   // 显式关闭已被现代浏览器废弃的 XSS 过滤器（开着会和 CSP 互相干扰，且实现有 bug）
   res.setHeader('X-XSS-Protection', '0');
   // 内容安全策略：只允许同源资源，禁止内联脚本（脚本外置到 .js 文件后已可实施），
-  // 禁止 object/embed、限定 <base>、限定表单提交目标；img 允许 data: 用于头像占位
+  // 禁止 object/embed、限定 <base>、限定表单提交目标；img 允许 data: 用于头像占位。
+  // style-src 留 'unsafe-inline' 是因为各页面里有大量 <style> 块（重构到外置文件工作量过大）；
+  // 但显式禁用 style-src-attr 'unsafe-inline'，杜绝 HTML style="..." 属性里的 CSS injection
+  // （如 background:url(//evil/?x=...)、@import 渗出数据）——CSS injection 的主要攻击面。
   res.setHeader('Content-Security-Policy',
     "default-src 'self'; " +
     "script-src 'self'; " +
     "style-src 'self' 'unsafe-inline'; " +
+    "style-src-attr 'none'; " +
     "img-src 'self' data:; " +
     "media-src 'self'; " +
     "font-src 'self' data:; " +
@@ -111,6 +115,10 @@ app.use((_req, res, next) => {
 
 // 首次引导守卫（放在安全头之后，路由之前）
 app.use(setupGuard);
+
+// optionalAuth：尝试解析 session，挂到 req.user；未登录则不挂
+// 用于公开但需个性化的端点（/api/data 公开版按登录态决定是否暴露 username）
+app.use(optionalAuth);
 
 // —— 通用 404 HTML ——
 // 与文末 catch-all 共用；后台守卫对未授权登录用户也返回这个，
@@ -331,14 +339,24 @@ const searchLimiter = rateLimit({
 
 // 重复搜索拦截：同一 IP 在窗口内搜相同关键词直接返回提示
 // 防止用户反复刷新浪费数据库查询
+// 硬上限 10000：超过后按插入顺序淘汰最旧的 25%，避免恶意刷搜索把内存撑爆
 const lastSearch = new Map();
+const LAST_SEARCH_MAX = 10000;
 
 function sweepLastSearch() {
   const now = Date.now();
   for (const [ip, entry] of lastSearch) {
     if (now - entry.at > SEARCH_WINDOW_MS) lastSearch.delete(ip);
   }
-  if (lastSearch.size > 1000) lastSearch.clear();
+  if (lastSearch.size > LAST_SEARCH_MAX) {
+    const drop = Math.max(1, Math.floor(lastSearch.size * 0.25));
+    let i = 0;
+    for (const k of lastSearch.keys()) {
+      if (i >= drop) break;
+      lastSearch.delete(k);
+      i += 1;
+    }
+  }
 }
 
 function repeatSearchGuard(req, res, next) {

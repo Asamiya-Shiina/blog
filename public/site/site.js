@@ -352,7 +352,10 @@
 
       // 休息状态特殊显示
       if (device.icon === 'break') {
-        const host = device.id ? (device.id.split('_')[1] || '') : '';
+        // 新版后端单独返回 deviceName；旧版回退到 id.split('_')[1]
+        const host = device.deviceName != null
+          ? device.deviceName
+          : (device.id ? (device.id.split('_')[1] || '') : '');
         const hostHtml = host
           ? `<div class="status-window-title" title="${escapeAttr(host)}">${escapeHtml(host)}</div>`
           : '';

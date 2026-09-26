@@ -83,7 +83,10 @@
     for (const device of devices) {
       // 休息状态（客户端检测到 5 分钟无输入）：只显示一个咖啡杯图标
       if (device.icon === 'break') {
-        const host = device.id ? (device.id.split('_')[1] || '') : '';
+        // 新版后端单独返回 deviceName；旧版回退到 id.split('_')[1]
+        const host = device.deviceName != null
+          ? device.deviceName
+          : (device.id ? (device.id.split('_')[1] || '') : '');
         const hostHtml = host ? `<div class="status-device-name">${escapeHtml(host)}</div>` : '';
         html += `
           <div class="status-display">
@@ -101,8 +104,11 @@
       const titleHtml = device.title
         ? `<div class="status-window-title" title="${escapeHtml(device.title)}">${escapeHtml(device.title)}</div>`
         : '';
-      // device.id 格式是 `${username}_${deviceName}`，下划线后是设备名（如 "PC"、"笔电"）
-      const deviceNameHtml = device.id ? `<div class="status-device-name">${escapeHtml(device.id.split('_')[1] || '')}</div>` : '';
+      // 新版后端单独返回 deviceName；旧版回退到 id.split('_')[1]
+      const dName = device.deviceName != null
+        ? device.deviceName
+        : (device.id ? (device.id.split('_')[1] || '') : '');
+      const deviceNameHtml = dName ? `<div class="status-device-name">${escapeHtml(dName)}</div>` : '';
       html += `
         <div class="status-display">
           <div class="status-icon-wrap active">${icon}</div>

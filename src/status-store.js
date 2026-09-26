@@ -24,13 +24,24 @@ function cleanStaleDevices() {
 }
 
 // 获取公开状态：清理过期设备后，返回所有活跃设备的信息
-function getPublicStatus() {
+// viewer 可选：传当前登录用户对象时，每个设备额外返回 username 字段；
+// 未传（或匿名访问）时，username 固定为 'anonymous'，仅暴露用户自愿公开的 deviceName。
+// 这样公开访客无法通过 /api/data 或 SSE 枚举在线用户名。
+function getPublicStatus(viewer) {
   cleanStaleDevices();
+  const showUsername = !!(viewer && viewer.username);
   const activeDevices = [];
   for (const [id, device] of devices) {
     if (device.active) {
+      // deviceId 格式: `${username}_${deviceName}`（下划线分隔）
+      // 注意：username 不含下划线（[src/routes/auth.js] 正则约束），可用 lastIndexOf 切分
+      const sep = id.lastIndexOf('_');
+      const username = sep > 0 ? id.slice(0, sep) : id;
+      const deviceName = sep > 0 ? id.slice(sep + 1) : '';
       activeDevices.push({
-        id,            // deviceId（用户名_设备名）
+        id,                       // 内部 id（保持兼容：前台 site.js 用 deviceName 时按 lastIndexOf 解析）
+        username: showUsername ? username : 'anonymous',
+        deviceName,               // 设备名（用户自愿公开）
         app: device.app,
         title: device.title,
         icon: device.icon,

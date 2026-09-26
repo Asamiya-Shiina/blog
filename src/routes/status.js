@@ -104,8 +104,9 @@ router.get('/config', requireAuth, (req, res) => {
 // ============ 公开 API（无需登录） ============
 
 // GET /api/data：获取当前所有活跃设备状态（公开信息）
-router.get('/', (_req, res) => {
-  res.json(store.getPublicStatus());
+// 未登录访客拿到的 username 统一为 'anonymous'，避免枚举在线用户名
+router.get('/', (req, res) => {
+  res.json(store.getPublicStatus(req.user || null));
 });
 
 // GET /api/data/stream：SSE 实时推送
@@ -126,8 +127,8 @@ router.get('/stream', (req, res) => {
     'Connection': 'keep-alive',             // 保持长连接
     'X-Accel-Buffering': 'no',              // 禁用 Nginx 缓冲
   });
-  // 立即发送当前状态
-  res.write(`data: ${JSON.stringify(store.getPublicStatus())}\n\n`);
+  // 立即发送当前状态（已登录用户可看到 username，未登录访客拿到 anonymous）
+  res.write(`data: ${JSON.stringify(store.getPublicStatus(req.user || null))}\n\n`);
   // 注册为 SSE 客户端，后续状态变化会自动推送
   store.addClient(res);
   // 每 30 秒发送心跳，防止连接被中间代理断开

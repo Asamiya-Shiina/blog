@@ -29,7 +29,7 @@
           <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--line)">
             <p><strong>在线</strong> - ${escapeHtml(d.app)}</p>
             ${d.title ? '<p>' + escapeHtml(d.title) + '</p>' : ''}
-            <p class="help">设备: ${escapeHtml(d.id)} · 最后更新: ${new Date(d.updatedAt).toLocaleString()}</p>
+            <p class="help">用户: ${escapeHtml(d.username || 'anonymous')} · 设备: ${escapeHtml(d.deviceName || d.id || '')} · 最后更新: ${new Date(d.updatedAt).toLocaleString()}</p>
           </div>
         `).join('');
       }
