@@ -29,19 +29,19 @@
 
       <div id="notice" class="notice"></div>
 
-      <div class="card" style="display:flex;gap:10px;align-items:center">
-        <input type="text" id="name" placeholder="新分类名…" maxlength="50" style="max-width:300px" />
+      <div class="card flex-gap">
+        <input type="text" id="name" placeholder="新分类名…" maxlength="50" class="input-w-300" />
         <button class="btn btn-primary" id="add" type="button">+ 新增分类</button>
       </div>
 
-      <div class="card" style="padding:0;margin-top:16px">
+      <div class="card tight-top">
         <table>
           <thead>
             <tr>
               <th>分类名</th>
-              <th style="width:15%">文章数</th>
-              <th style="width:15%">创建时间</th>
-              <th style="width:20%;text-align:right">操作</th>
+              <th class="col-num-15">文章数</th>
+              <th class="col-time-15">创建时间</th>
+              <th class="col-act-20">操作</th>
             </tr>
           </thead>
           <tbody id="rows">

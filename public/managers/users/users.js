@@ -108,12 +108,12 @@
         ).join('');
         return `
           <tr>
-            <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ' <span style="color:var(--muted);font-size:12px">（你）</span>' : ''}</td>
+            <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ' <span class="row-tags-empty">（你）</span>' : ''}</td>
             <td>${canManage && !isSelf
               ? `<select class="role-select" data-id="${u.id}" data-name="${escapeHtml(u.username)}">${roleOptions}</select>`
               : `<span class="tag">${ROLE_LABEL[u.role] || escapeHtml(u.role)}</span>`}</td>
-            <td style="color:var(--muted);font-size:13px">${(u.created_at || '').replace('T', ' ').slice(0, 16)}</td>
-            <td style="text-align:right;white-space:nowrap">
+            <td class="muted-sm">${(u.created_at || '').replace('T', ' ').slice(0, 16)}</td>
+            <td class="row-actions">
               <button class="btn btn-ghost" data-act="reset" data-id="${u.id}" data-name="${escapeHtml(u.username)}">重置密码</button>
               ${canManage && !isSelf ? `<button class="btn btn-danger" data-act="delete" data-id="${u.id}" data-name="${escapeHtml(u.username)}">删除</button>` : ''}
             </td>

@@ -49,11 +49,11 @@ body::before {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 14px 28px;
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  border-bottom: 1px solid var(--line);
+  padding: 13px 28px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 .topbar .brand {
   font-family: Georgia, "Times New Roman", "Songti SC", serif;
@@ -127,6 +127,7 @@ body::before {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 16px;
+  margin-bottom: 12px;
 }
 .stat {
   background: rgba(255, 255, 255, 0.78);
@@ -309,3 +310,131 @@ tr.row:hover { background: rgba(0, 0, 0, 0.03); }
 .msg { font-size: 14px; margin-top: 12px; min-height: 1em; }
 .msg.ok { color: #15803d; }
 .msg.bad { color: #b91c1c; }
+
+/* —— 精致化：只增强质感，不改变布局 —— */
+/* 背景更通透，毛玻璃感更足 */
+body::before {
+  background: rgba(255, 255, 255, 0.62);
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+}
+/* 卡片阴影更细腻、有层次 */
+.card, .stat { box-shadow: 0 8px 30px rgba(0, 0, 0, 0.07); }
+/* 表格斑马纹，降低整行 hover 的跳跃感 */
+tbody tr:nth-child(odd) { background: rgba(0, 0, 0, 0.015); }
+/* 细滚动条与输入框聚焦光晕 */
+* { scrollbar-width: thin; scrollbar-color: rgba(0, 0, 0, 0.18) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.18); border-radius: 999px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.3); }
+input:focus, textarea:focus, select:focus { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
+/* 键盘操作可见焦点（可访问性） */
+:focus-visible { outline: 2px solid rgba(59, 130, 246, 0.55); outline-offset: 2px; }
+
+/* —— 替代被 CSP style-src-attr 'none' 拦截的内联样式集中定义 —— */
+/* 文本 */
+.muted-sm  { color: var(--muted); font-size: 13px; }
+.muted-xs  { color: var(--muted); font-size: 12px; }
+.danger-sm { color: var(--danger); font-size: 13px; }
+.muted-tx  { color: var(--muted); }
+.danger-tx { color: var(--danger); }
+.t-right   { text-align: right; }
+.t-center  { text-align: center; }
+.nowrap    { white-space: nowrap; }
+.ellipsis  { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hide      { display: none !important; }
+
+/* 表格列宽 */
+.col-status  { width: 11%; }
+.col-cats    { width: 16%; }
+.col-updated { width: 16%; }
+.col-actions { width: 15%; text-align: right; }
+.col-num-15  { width: 15%; }
+.col-time-15 { width: 15%; }
+.col-act-20  { width: 20%; text-align: right; }
+.col-name-40 { width: 40%; }
+.col-role-15 { width: 15%; }
+.col-created-20 { width: 20%; }
+.col-42 { width: 42%; }
+.col-10 { width: 10%; }
+.col-18 { width: 18%; }
+.col-30 { width: 30%; text-align: right; }
+
+/* 工具栏 / 表单 */
+.toolbar + .toolbar              { margin-top: 12px; }
+.toolbar .gap-10                 { display: flex; gap: 10px; align-items: center; }
+.toolbar.compact .field          { margin-bottom: 0; }
+.toolbar.align-end               { justify-content: flex-end; }
+.input-w-140 { width: 140px; }
+.input-w-160 { width: 160px; }
+.input-w-240 { width: 240px; }
+.input-w-300 { max-width: 300px; }
+.input-w-220 { max-width: 220px; }
+.input-h-64  { min-height: 64px; }
+
+/* 卡片变体 */
+.card.tight       { padding: 0; }
+.card.tight-top   { padding: 0; margin-top: 16px; }
+.card.tight-mt24  { padding: 0; margin-top: 24px; }
+.card.flex-row    { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.card.flex-gap    { display: flex; gap: 10px; align-items: center; }
+
+/* 内部布局 */
+.title-row-2col   { display: grid; grid-template-columns: 1fr 180px; gap: 16px; }
+.between-row      { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.flex-end-8       { display: flex; gap: 8px; margin-top: 10px; }
+.flex-end-row     { display: flex; justify-content: flex-end; margin-top: 8px; }
+.mt-12            { margin-top: 12px; }
+.ml-8             { margin-left: 8px; }
+
+/* 动态行用(被 posts.js / overview.js 等生成的行) */
+.row-item         { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.row-item .title  { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-meta         { color: var(--muted); font-size: 12px; }
+.row-time         { color: var(--muted); font-size: 13px; }
+.row-actions      { text-align: right; white-space: nowrap; }
+.row-original     { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.row-tags-empty   { color: var(--muted); font-size: 12px; }
+
+/* 模态框(后台音乐预览) */
+.modal-card       { background: rgba(255,255,255,0.95); border-radius: 14px; padding: 24px; width: min(420px, 90vw); box-shadow: 0 12px 48px rgba(0,0,0,0.25); }
+.modal-title      { font-weight: 600; margin-bottom: 12px; }
+.modal-audio      { width: 100%; }
+.modal-actions    { text-align: right; margin-top: 14px; }
+
+/* 表单内联 label(checkbox 同行) */
+.field.inline     { display: flex; align-items: center; gap: 8px; }
+.field.inline .lbl { margin: 0; }
+
+/* 滑块验证码 notch */
+.notch.hidden     { display: none; }
+
+/* 音乐上传区域 */
+.upload-meta-row  { display: flex; gap: 10px; align-items: flex-end; margin-top: 14px; flex-wrap: wrap; }
+.field.input-grow { flex: 1; min-width: 240px; margin-bottom: 0; }
+.active-banner.inactive   { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.08); }
+.badge.muted-badge       { background: var(--muted); }
+.device-block            { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.help-mt0                { margin-top: 0; }
+.cats-row                { display: flex; flex-wrap: wrap; gap: 8px; }
+.h2-tight                { margin: 0; }
+/* 试听遮罩层(用 JS 设 style.cssText 不受 CSP style-src-attr 影响,但类还是稳一些) */
+#preview-overlay         { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+
+/* —— 替代被 CSP `style-src-attr 'none'` 拦截的内联样式 —— */
+/* posts/index.html 工具栏里的筛选下拉 */
+.toolbar select.status-filter   { display: none; max-width: 140px; }
+.toolbar select.category-filter { display: none; max-width: 160px; }
+/* 表格列宽 */
+.col-status  { width: 11%; }
+.col-cats    { width: 16%; }
+.col-updated { width: 16%; }
+.col-actions { width: 15%; text-align: right; }
+/* 表格卡片无内边距、分页工具栏 */
+.card.tight       { padding: 0; }
+.toolbar.pagination { margin-top: 16px; justify-content: flex-end; }
+/* posts.js 动态行原本的 inline 样式 */
+.row-excerpt { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.row-time    { color: var(--muted); font-size: 13px; }
+/* 概览页:隐藏快速操作卡(若恢复显示,去掉 .hide-card) */
+.card.hide { display: none; }

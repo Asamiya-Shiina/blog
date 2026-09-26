@@ -31,7 +31,7 @@
       <section id="setup-view" hidden>
         <div class="card">
           <h2>首次设置</h2>
-          <p style="color:var(--muted);margin-top:0">还没有任何账号。创建第一个管理员账号，创建后自动登录。</p>
+          <p class="muted-sm help-mt0">还没有任何账号。创建第一个管理员账号，创建后自动登录。</p>
           <div class="notice error" id="setup-error"></div>
           <form id="setup-form">
             <label class="field">
@@ -51,8 +51,8 @@
       <section id="manage-view" hidden>
         <div class="toolbar">
           <button class="btn btn-primary" id="create-toggle" type="button">+ 新建用户</button>
-          <div style="flex:1"></div>
-          <span style="color:var(--muted);font-size:13px" id="count-info"></span>
+          <div class="spacer"></div>
+          <span class="muted-sm" id="count-info"></span>
         </div>
 
         <div class="card" id="create-card" hidden>
@@ -68,18 +68,18 @@
               <input type="password" name="password" required minlength="8" maxlength="256" autocomplete="new-password" />
             </label>
             <button class="btn btn-primary" type="submit">创建</button>
-            <button class="btn btn-ghost" id="create-cancel" type="button" style="margin-left:8px">取消</button>
+            <button class="btn btn-ghost ml-8" id="create-cancel" type="button">取消</button>
           </form>
         </div>
 
-        <div class="card" style="padding:0">
+        <div class="card tight">
           <table>
             <thead>
               <tr>
-                <th style="width:40%">用户名</th>
-                <th style="width:15%">角色</th>
-                <th style="width:20%">创建时间</th>
-                <th style="text-align:right">操作</th>
+                <th class="col-name-40">用户名</th>
+                <th class="col-role-15">角色</th>
+                <th class="col-created-20">创建时间</th>
+                <th class="t-right">操作</th>
               </tr>
             </thead>
             <tbody id="rows">

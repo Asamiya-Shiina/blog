@@ -29,28 +29,28 @@
 
       <div class="toolbar">
         <input type="search" id="q" placeholder="搜索标题、摘要或正文…" />
-        <select id="status" style="max-width:140px">
+        <select id="status" class="status-filter">
           <option value="">全部状态</option>
           <option value="published">已发布</option>
           <option value="draft">草稿</option>
         </select>
-        <select id="category" style="max-width:160px">
+        <select id="category" class="category-filter">
           <option value="">全部分类</option>
         </select>
         <button class="btn btn-ghost" id="search-btn" type="button">搜索</button>
-        <div class="spacer" style="flex:1"></div>
+        <div class="spacer"></div>
         <a class="btn btn-primary" href="/managers/editor">+ 新建文章</a>
       </div>
 
-      <div class="card" style="padding:0">
+      <div class="card tight">
         <table>
           <thead>
             <tr>
               <th>标题</th>
-              <th style="width:11%">状态</th>
-              <th style="width:16%">分类</th>
-              <th style="width:16%">更新时间</th>
-              <th style="width:15%;text-align:right">操作</th>
+              <th class="col-status">状态</th>
+              <th class="col-cats">分类</th>
+              <th class="col-updated">更新时间</th>
+              <th class="col-actions">操作</th>
             </tr>
           </thead>
           <tbody id="rows">
@@ -59,9 +59,9 @@
         </table>
       </div>
 
-      <div class="toolbar" style="margin-top:16px;justify-content:flex-end">
+      <div class="toolbar pagination">
         <button class="btn btn-ghost" id="prev" type="button" disabled>上一页</button>
-        <span id="page-info" style="color:var(--muted);font-size:13px"></span>
+        <span id="page-info" class="muted-sm"></span>
         <button class="btn btn-ghost" id="next" type="button" disabled>下一页</button>
       </div>
 

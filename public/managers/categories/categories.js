@@ -17,9 +17,9 @@
     rowsEl.innerHTML = list.map(c => `
       <tr class="row">
         <td><strong>${escapeHtml(c.name)}</strong></td>
-        <td style="color:var(--muted);font-size:13px">${c.post_count ?? 0}</td>
-        <td style="color:var(--muted);font-size:13px">${(c.created_at || '').replace('T', ' ').slice(0, 16)}</td>
-        <td style="text-align:right">
+        <td class="muted-sm">${c.post_count ?? 0}</td>
+        <td class="muted-sm">${(c.created_at || '').replace('T', ' ').slice(0, 16)}</td>
+        <td class="t-right">
           <button class="btn btn-ghost" data-act="rename" data-id="${c.id}" data-name="${escapeHtml(c.name)}">重命名</button>
           <button class="btn btn-danger" data-act="del" data-id="${c.id}" data-name="${escapeHtml(c.name)}">删除</button>
         </td>

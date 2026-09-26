@@ -40,7 +40,7 @@
         <h2>黑名单</h2>
         <p class="help">匹配这些名称的应用不会被上报。</p>
         <div id="blacklist-list"></div>
-        <div class="toolbar" style="margin-top: 12px;">
+        <div class="toolbar">
           <input type="text" id="blacklist-input" placeholder="输入进程名，如 chrome" />
           <button class="btn btn-primary" type="button">添加</button>
         </div>
@@ -51,7 +51,7 @@
         <h2>黑名单模式（正则）</h2>
         <p class="help">匹配这些正则表达式的窗口标题或进程名不会被上报。</p>
         <div id="patterns-list"></div>
-        <div class="toolbar" style="margin-top: 12px;">
+        <div class="toolbar">
           <input type="text" id="pattern-input" placeholder="输入正则，如 .*密码.*" />
           <button class="btn btn-primary" type="button">添加</button>
         </div>
@@ -62,9 +62,9 @@
         <h2>应用名映射</h2>
         <p class="help">将进程名映射为友好的显示名称（精确匹配）。</p>
         <div id="mapping-list"></div>
-        <div class="toolbar" style="margin-top: 12px;">
-          <input type="text" id="mapping-key" placeholder="进程名" style="width: 140px;" />
-          <input type="text" id="mapping-value" placeholder="显示名" style="width: 140px;" />
+        <div class="toolbar">
+          <input type="text" id="mapping-key" placeholder="进程名" class="input-w-140" />
+          <input type="text" id="mapping-value" placeholder="显示名" class="input-w-140" />
           <button class="btn btn-primary" type="button">添加</button>
         </div>
       </div>
@@ -74,9 +74,9 @@
         <h2>应用名模式（正则）</h2>
         <p class="help">用正则表达式匹配进程名，同一开头的进程可归为一类。优先级低于精确映射。</p>
         <div id="app-patterns-list"></div>
-        <div class="toolbar" style="margin-top: 12px;">
-          <input type="text" id="app-pattern-regex" placeholder="正则，如 ^python" style="width: 160px;" />
-          <input type="text" id="app-pattern-name" placeholder="显示名" style="width: 140px;" />
+        <div class="toolbar">
+          <input type="text" id="app-pattern-regex" placeholder="正则，如 ^python" class="input-w-160" />
+          <input type="text" id="app-pattern-name" placeholder="显示名" class="input-w-140" />
           <button class="btn btn-primary" type="button">添加</button>
         </div>
       </div>
@@ -86,7 +86,7 @@
         <h2>显示标题的应用</h2>
         <p class="help">这些应用会显示完整的窗口标题，其他应用只显示应用名。</p>
         <div id="title-apps-list"></div>
-        <div class="toolbar" style="margin-top: 12px;">
+        <div class="toolbar">
           <input type="text" id="title-app-input" placeholder="输入进程名" />
           <button class="btn btn-primary" type="button">添加</button>
         </div>
@@ -97,7 +97,7 @@
         <h2>标题应用模式（正则）</h2>
         <p class="help">匹配正则的进程会显示完整的窗口标题。</p>
         <div id="title-app-patterns-list"></div>
-        <div class="toolbar" style="margin-top: 12px;">
+        <div class="toolbar">
           <input type="text" id="title-app-pattern-input" placeholder="正则，如 ^python" />
           <button class="btn btn-primary" type="button">添加</button>
         </div>

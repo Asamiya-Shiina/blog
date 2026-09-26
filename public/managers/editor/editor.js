@@ -23,7 +23,7 @@
 
   function renderCats(list, selectedSet = new Set()) {
     if (!list.length) {
-      catsEl.innerHTML = '<span style="color:var(--muted);font-size:13px">还没有分类，可在下方新增一个。</span>';
+      catsEl.innerHTML = '<span class="muted-sm">还没有分类，可在下方新增一个。</span>';
       return;
     }
     catsEl.innerHTML = list.map(c => `
@@ -38,7 +38,7 @@
     try {
       const data = await api('GET', '/api/categories');
       renderCats(data.items || [], categoryIds);
-    } catch { catsEl.innerHTML = '<span style="color:var(--danger);font-size:13px">分类加载失败</span>'; }
+    } catch { catsEl.innerHTML = '<span class="danger-sm">分类加载失败</span>'; }
   }
 
   addCatBtn.addEventListener('click', async () => {
@@ -88,9 +88,9 @@
     const md = contentEl.value;
     try {
       const { content_html } = await api('POST', '/api/posts/preview', { content_md: md });
-      previewEl.innerHTML = content_html || '<div style="color:var(--muted)">（空内容）</div>';
+      previewEl.innerHTML = content_html || '<div class="muted-tx">（空内容）</div>';
     } catch {
-      previewEl.innerHTML = '<div style="color:var(--danger)">预览失败</div>';
+      previewEl.innerHTML = '<div class="danger-tx">预览失败</div>';
     }
   }
   contentEl.addEventListener('input', () => {

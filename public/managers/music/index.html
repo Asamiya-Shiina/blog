@@ -86,8 +86,8 @@
           <div><strong>点击选择</strong> 或拖拽音频文件到这里</div>
           <div class="hint">支持 MP3 / WAV / OGG / FLAC / M4A / AAC，单文件最大 15MB</div>
         </label>
-        <div style="display:flex;gap:10px;align-items:flex-end;margin-top:14px;flex-wrap:wrap">
-          <label class="field" style="flex:1;min-width:240px;margin-bottom:0">
+        <div class="upload-meta-row">
+          <label class="field input-grow">
             <span class="lbl">显示标题（可选，留空则取文件名）</span>
             <input type="text" id="title" maxlength="200" placeholder="例如：夜曲" />
           </label>
@@ -96,14 +96,14 @@
       </div>
 
       <!-- 列表 -->
-      <div class="card" style="margin-top:24px;padding:0">
+      <div class="card tight-mt24">
         <table>
           <thead>
             <tr>
-              <th style="width:42%">标题</th>
-              <th style="width:10%">大小</th>
-              <th style="width:18%">上传时间</th>
-              <th style="width:30%;text-align:right">操作</th>
+              <th class="col-42">标题</th>
+              <th class="col-10">大小</th>
+              <th class="col-18">上传时间</th>
+              <th class="col-30">操作</th>
             </tr>
           </thead>
           <tbody id="rows">

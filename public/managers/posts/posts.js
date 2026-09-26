@@ -39,11 +39,11 @@
       } else {
         rowsEl.innerHTML = data.items.map(p => `
           <tr class="row" data-id="${p.id}">
-            <td><strong>${escapeHtml(p.title)}</strong>${p.excerpt ? `<div style="color:var(--muted);font-size:12px;margin-top:2px">${escapeHtml(p.excerpt)}</div>` : ''}</td>
+            <td><strong>${escapeHtml(p.title)}</strong>${p.excerpt ? `<div class="row-excerpt">${escapeHtml(p.excerpt)}</div>` : ''}</td>
             <td><span class="tag ${p.status === 'published' ? 'tag-published' : 'tag-draft'}">${p.status === 'published' ? '已发布' : '草稿'}</span></td>
-            <td>${(p.categories || []).map(c => `<span class="tag">${escapeHtml(c.name)}</span>`).join(' ') || '<span style="color:var(--muted);font-size:12px">—</span>'}</td>
-            <td style="color:var(--muted);font-size:13px">${(p.updated_at || '').replace('T', ' ').slice(0, 16)}</td>
-            <td style="text-align:right">
+            <td>${(p.categories || []).map(c => `<span class="tag">${escapeHtml(c.name)}</span>`).join(' ') || '<span class="row-excerpt">—</span>'}</td>
+            <td class="row-time">${(p.updated_at || '').replace('T', ' ').slice(0, 16)}</td>
+            <td class="col-actions">
               <button class="btn btn-ghost btn-edit" data-id="${p.id}">编辑</button>
               <button class="btn btn-danger" data-id="${p.id}" data-title="${escapeHtml(p.title)}">删除</button>
             </td>

@@ -30,8 +30,8 @@
   function renderActive(song) {
     if (!song) {
       activeBannerEl.innerHTML = `
-        <div class="active-banner" style="background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.08)">
-          <span class="badge" style="background:var(--muted)">未激活</span>
+        <div class="active-banner inactive">
+          <span class="badge muted-badge">未激活</span>
           <span class="meta">还没选歌。下方选一首设为当前播放，前台播放器就会播它。</span>
         </div>`;
       return;
@@ -61,11 +61,11 @@
         <tr>
           <td>
             <strong>${escapeHtml(s.title)}</strong>${s.is_active ? ' <span class="tag tag-active">当前播放</span>' : ''}
-            <div style="color:var(--muted);font-size:12px;margin-top:2px">${escapeHtml(s.original_name)} · ${escapeHtml(s.mime)}</div>
+            <div class="row-original">${escapeHtml(s.original_name)} · ${escapeHtml(s.mime)}</div>
           </td>
-          <td style="color:var(--muted);font-size:13px">${fmtSize(s.size_bytes)}</td>
-          <td style="color:var(--muted);font-size:13px">${(s.created_at || '').replace('T', ' ').slice(0, 16)}</td>
-          <td style="text-align:right;white-space:nowrap">
+          <td class="muted-sm">${fmtSize(s.size_bytes)}</td>
+          <td class="muted-sm">${(s.created_at || '').replace('T', ' ').slice(0, 16)}</td>
+          <td class="row-actions">
             <button class="btn btn-ghost" data-act="play"  data-src="${escapeHtml(s.src)}" data-title="${escapeHtml(s.title)}">试听</button>
             ${s.is_active
               ? '<button class="btn btn-ghost" data-act="clear">取消激活</button>'
@@ -98,10 +98,10 @@
       overlay.id = 'preview-overlay';
       overlay.style.cssText = 'position:fixed;inset:0;z-index:50;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
       overlay.innerHTML = `
-        <div style="background:rgba(255,255,255,0.95);border-radius:14px;padding:24px;width:min(420px,90vw);box-shadow:0 12px 48px rgba(0,0,0,0.25)">
-          <div id="preview-title" style="font-weight:600;margin-bottom:12px">试听</div>
-          <audio id="preview-audio" controls style="width:100%"></audio>
-          <div style="text-align:right;margin-top:14px">
+        <div class="modal-card">
+          <div id="preview-title" class="modal-title">试听</div>
+          <audio id="preview-audio" class="modal-audio" controls></audio>
+          <div class="modal-actions">
             <button class="btn btn-ghost" id="preview-close" type="button">关闭</button>
           </div>
         </div>`;

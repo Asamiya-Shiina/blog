@@ -54,7 +54,7 @@
           <input type="text" id="title" maxlength="200" required />
         </label>
 
-        <div style="display:grid;grid-template-columns:1fr 180px;gap:16px">
+        <div class="title-row-2col">
           <label class="field">
             <span class="lbl">Slug（URL 路径，可自动从标题生成）</span>
             <input type="text" id="slug" maxlength="120" />
@@ -70,38 +70,38 @@
 
         <div class="field">
           <span class="lbl">分类（可多选，先选中再发布）</span>
-          <div id="cats" style="display:flex;flex-wrap:wrap;gap:8px">
-            <span style="color:var(--muted);font-size:13px">加载中…</span>
+          <div id="cats" class="cats-row">
+            <span class="muted-sm">加载中…</span>
           </div>
-          <div style="display:flex;gap:8px;margin-top:10px">
-            <input type="text" id="new-cat" placeholder="新增分类名…" maxlength="50" style="max-width:220px" />
+          <div class="flex-end-8">
+            <input type="text" id="new-cat" placeholder="新增分类名…" maxlength="50" class="input-w-220" />
             <button class="btn btn-ghost" id="add-cat" type="button">+ 新增</button>
           </div>
         </div>
 
         <label class="field">
           <span class="lbl">摘要（可选）</span>
-          <textarea id="excerpt" maxlength="500" style="min-height:64px"></textarea>
+          <textarea id="excerpt" maxlength="500" class="input-h-64"></textarea>
         </label>
       </div>
 
       <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-          <h2 style="margin:0">正文（Markdown）</h2>
-          <span style="color:var(--muted);font-size:12px">左侧编辑，右侧实时预览</span>
+        <div class="between-row">
+          <h2 class="h2-tight">正文（Markdown）</h2>
+          <span class="muted-xs">左侧编辑，右侧实时预览</span>
         </div>
         <div class="editor">
           <textarea id="content_md" class="large"></textarea>
-          <div class="preview" id="preview"><div style="color:var(--muted)">预览…</div></div>
+          <div class="preview" id="preview"><div class="muted-tx">预览…</div></div>
         </div>
       </div>
 
-      <div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="card flex-row">
         <button class="btn btn-primary" id="save">保存草稿</button>
         <button class="btn btn-primary" id="publish">保存并发布</button>
         <a class="btn btn-ghost" href="/managers/posts">返回列表</a>
-        <div class="spacer" style="flex:1"></div>
-        <button class="btn btn-danger" id="delete" style="display:none">删除</button>
+        <div class="spacer"></div>
+        <button class="btn btn-danger hide" id="delete">删除</button>
       </div>
 
     </main>

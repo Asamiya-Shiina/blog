@@ -20,13 +20,18 @@
       wrap.innerHTML = '<div class="empty">还没有文章。<a href="/managers/editor">写一篇 →</a></div>';
     } else {
       wrap.innerHTML = recent.map(p => `
-        <div class="row" style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="window.location.href='/managers/editor?id=${p.id}'">
+        <div class="row-item" data-id="${p.id}">
           <span class="tag ${p.status === 'published' ? 'tag-published' : 'tag-draft'}">${p.status === 'published' ? '已发布' : '草稿'}</span>
-          <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${window.admin.escapeHtml(p.title)}</span>
-          <span style="color:var(--muted);font-size:12px">${(p.updated_at || '').replace('T', ' ').slice(0, 16)}</span>
+          <span class="title">${window.admin.escapeHtml(p.title)}</span>
+          <span class="row-meta">${(p.updated_at || '').replace('T', ' ').slice(0, 16)}</span>
         </div>
       `).join('');
     }
+    // 行可点跳转编辑器（不能用内联 onclick，违反 CSP style-src-attr / 内联事件限制）
+    wrap.addEventListener('click', (e) => {
+      const row = e.target.closest('.row-item');
+      if (row) window.location.href = '/managers/editor?id=' + row.dataset.id;
+    });
   } catch (e) {
     console.error(e);
   }
