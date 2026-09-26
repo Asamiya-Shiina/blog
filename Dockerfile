@@ -1,17 +1,24 @@
-FROM node:24-slim
+# syntax=docker/dockerfile:1
+# 多阶段构建：编译工具只留在 build 阶段，runtime 精简到最小。
+# 体积从 ~1GB 降到约 200MB 量级。
 
-# better-sqlite3 + bcrypt 需要编译工具 + gosu 用于降权
-RUN apt-get update && apt-get install -y python3 make g++ gosu && rm -rf /var/lib/apt/lists/*
-
-# 设置时区为北京时间
-ENV TZ=Asia/Shanghai
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
+# —— build：装编译工具，编译 better-sqlite3 / bcrypt 等原生模块 ——
+FROM node:24-slim AS build
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 
+# —— runtime：不带编译器，只保留运行依赖 ——
+FROM node:24-slim AS runtime
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+# gosu 降权；libstdc++6 供原生 .node 模块（better-sqlite3/bcrypt）加载
+RUN apt-get update && apt-get install -y --no-install-recommends gosu libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY --from=build /app/node_modules ./node_modules
 COPY . .
 
 RUN chmod +x docker-entrypoint.sh

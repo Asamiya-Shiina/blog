@@ -8,6 +8,8 @@ services:
     environment:
       - NODE_ENV=production
       - TRUST_PROXY=1
+      # 限制 V8 旧生代堆，收紧常驻内存并让 GC 更积极；按需微调
+      - NODE_OPTIONS=--max-old-space-size=128
     volumes:
       - ./data:/app/data
     deploy:

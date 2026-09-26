@@ -4,7 +4,16 @@
 // 留言板需要记录发帖人 IP（仅管理员可见）并展示属地（所有人可见）。
 // 属地数据来自 geoip-lite（内置 MaxMind GeoLite2，进程内查表，无外网请求）。
 
-const geoip = require('geoip-lite');
+// —— 属地 ——
+// geoip-lite 整库约 100+MB 常驻内存：一旦 require 就立刻把整个数据库读进内存。
+// 这里惰性加载——只有第一次真正要解析某个 IP 属地方才 require，避免博客一启动就白占这 100MB
+//（自托管小站多数时候没有留言，属地在绝大多数情况下根本不会被用到）
+let geoip;
+function loadGeoip() {
+  if (geoip !== undefined) return geoip;
+  try { geoip = require('geoip-lite') || null; } catch { geoip = null; }
+  return geoip;
+}
 
 // 从 Express req 抽出第一个 IPv4；纯 IPv6 时回退到 IPv6 字符串。
 // trust proxy 已在 server.js 开启，req.ip 会沿 X-Forwarded-For 回溯。
@@ -39,8 +48,9 @@ const CN_REGION_CN = {
 // 把 IP 解析成简短属地字符串，例如 "中国/北京"、"美国"。
 // 查不到任何信息时返回空串（前端不渲染）。
 function formatLocation(ip) {
-  if (!ip || !geoip) return '';
-  const info = geoip.lookup(ip);
+  const g = loadGeoip();
+  if (!ip || !g) return '';
+  const info = g.lookup(ip);
   if (!info) return '';
   const country = COUNTRY_CN[info.country] || info.country || '';
   if (!country) return '';
