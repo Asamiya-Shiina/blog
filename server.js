@@ -277,7 +277,7 @@ app.get(['/category/:id', '/category/:id/'], (req, res) => {
   const category = Number.isInteger(id)
     ? db.prepare('SELECT id, name FROM categories WHERE id = ?').get(id)
     : null;
-  if (!category) return res.status(404).type('html').send(notFoundPage(req.params.id));
+  if (!category) return res.status(404).type('html').send(NOT_FOUND_HTML);
   const rows = db.prepare(`
     SELECT id, slug, title, excerpt, updated_at, created_at
     FROM posts
@@ -297,7 +297,7 @@ app.get(['/posts/:slug', '/posts/:slug/'], (req, res) => {
     FROM posts
     WHERE slug = ? AND status = 'published'
   `).get(slug);
-  if (!row) return res.status(404).type('html').send(notFoundPage(slug));
+  if (!row) return res.status(404).type('html').send(NOT_FOUND_HTML);
   const post = withCategories([row])[0];
   res.type('html').send(renderPostPage({ ...post, published_at: post.updated_at }));
 });
@@ -427,30 +427,7 @@ app.get(['/status', '/status/'], (_req, res) => {
   res.type('html').send(renderStatusPage());
 });
 
-// —— 文章 404 页面（内联 HTML，带 XSS 转义） ——
-function notFoundPage(slug) {
-  return `<!DOCTYPE html>
-<html lang="zh-CN"><head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>未找到文章</title>
-<style>
-  html,body{margin:0;padding:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-    color:#1a1a1a;background:url('/image/IMG_20250703_100031.jpeg') center/cover no-repeat fixed}
-  body::before{content:'';position:fixed;inset:0;background:rgba(255,255,255,0.5);backdrop-filter:blur(8px);z-index:-1}
-  .box{text-align:center;padding:32px}
-  h1{font-family:Georgia,serif;font-weight:400;margin:0 0 12px}
-  p{color:#6b6b6b;margin:0 0 24px}
-  a{color:#3b82f6;text-decoration:none;border-bottom:1px solid rgba(59,130,246,0.3)}
-  a:hover{border-bottom-color:#3b82f6}
-</style></head>
-<body><div class="box">
-  <h1>404</h1>
-  <p>找不到文章 <code>${String(slug).replace(/[<>&"']/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[ch]))}</code></p>
-  <a href="/posts/">← 所有文章</a>
-</div></body></html>`;
-}
+// —— 文章 / 分类 / 兜底统一用 NOT_FOUND_HTML（见上方） ——
 
 // —— 静态文件托管 ——
 // public/ 目录包含 login、setup、managers、me、register 等页面
