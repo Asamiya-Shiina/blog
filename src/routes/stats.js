@@ -12,8 +12,20 @@ const router = express.Router();
 
 // 同一 IP 5 分钟内只记录一次（防刷）
 const VIEW_DEBOUNCE_MS = 5 * 60 * 1000;
-// 内存缓存：{ ip: { path: timestamp } }
+// 内存缓存：{ "ip::path": timestamp }
+// 硬上限：超过后强制清掉最旧的 25%，防止攻击者用大量不同 path 把内存撑爆
+const VIEW_CACHE_MAX = 10000;
 const recentViews = new Map();
+
+function evictOldest(map, ratio) {
+  const drop = Math.max(1, Math.floor(map.size * ratio));
+  let i = 0;
+  for (const k of map.keys()) {
+    if (i >= drop) break;
+    map.delete(k);
+    i += 1;
+  }
+}
 
 function shouldRecord(ip, path) {
   const now = Date.now();
@@ -21,11 +33,12 @@ function shouldRecord(ip, path) {
   const last = recentViews.get(key);
   if (last && now - last < VIEW_DEBOUNCE_MS) return false;
   recentViews.set(key, now);
-  // 定期清理过期条目（避免内存泄漏）
-  if (recentViews.size > 10000) {
+  // 超过硬上限：先清过期项；仍超则按插入顺序淘汰最旧的 25%
+  if (recentViews.size > VIEW_CACHE_MAX) {
     for (const [k, t] of recentViews) {
       if (now - t > VIEW_DEBOUNCE_MS) recentViews.delete(k);
     }
+    if (recentViews.size > VIEW_CACHE_MAX) evictOldest(recentViews, 0.25);
   }
   return true;
 }
