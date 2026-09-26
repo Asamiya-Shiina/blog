@@ -66,6 +66,8 @@ docker compose up -d
 
 首次访问 `http://localhost:3000` 会被引导到 `/setup/`，填写用户名和密码即可创建全局管理员账号。`SESSION_SECRET` 会在容器启动时自动生成并持久化到 `data/.session-secret`（重启容器不丢）。
 
+> ⚠️ 上面的 compose 仅适合本地测试。生产部署请参考下文的「HTTPS 与 Cookie」章节，前置 Nginx / Caddy 反代并设 `TRUST_PROXY=1`，避免 cookie 在网络上明文传输。
+
 ### 本地开发
 
 ```bash
@@ -90,9 +92,49 @@ npm start
 | `SESSION_SECRET` | Docker 自动生成 | — | Session 签名密钥；丢失会吊销所有已签发 token |
 | `PORT` | 否 | `3000` | 监听端口 |
 | `DB_PATH` | 否 | `./data/blog.sqlite` | SQLite 文件路径 |
-| `COOKIE_SECURE` | 否 | `false` | HTTPS 环境设为 `true`（Cookie 加 Secure 标志） |
-| `TRUST_PROXY` | 否 | `false` | 反代层数（`true` / `false` / 数字 / `loopback`）；裸跑保持默认 |
+| `COOKIE_SECURE` | 否 | 按 `req.secure` | 控制 cookie 是否带 Secure 标志；不显式设时由 `req.secure` 自动判断。详见下文「HTTPS 与 Cookie」。 |
+| `TRUST_PROXY` | 否 | `false` | 反代层数（`true` / `false` / 数字 / `loopback`）；裸跑保持默认；前置 HTTPS 反代时设为 `1`。详见下文「HTTPS 与 Cookie」。 |
+| `SITE_URL` | 否 | `http://localhost:$PORT` | 邮件中拼接验证链接用的站点根地址；生产环境设为正式域名（如 `https://yourblog.com`）。 |
 | `NODE_ENV` | 否 | — | `production` 时错误响应只输出消息 |
+
+### HTTPS 与 Cookie
+
+`COOKIE_SECURE` 不在 `docker-compose.yml` 里显式设置，会按当前请求是否 HTTPS 自动决定 cookie 是否带 Secure 标志：
+
+| 部署方式 | 是否需要改配置 |
+|---|---|
+| 本地 `npm run dev` 直连 `http://localhost:3000` | 无需配置，HTTP 正常登录 |
+| 本地 `docker compose up` 裸跑（HTTP）| 无需配置，HTTP 正常登录 |
+| **生产 HTTPS**（前置 Nginx / Caddy 反代） | 需设 `TRUST_PROXY=1`（让 Express 信任 `X-Forwarded-Proto=https`），cookie 自动带 Secure |
+| 生产纯 HTTP 部署 | **不推荐**——cookie 在网络上是明文；如确需，加 `COOKIE_SECURE=true` 但浏览器会拒绝在 HTTP 下回带 cookie，导致登录失败 |
+| 内网 / NAS 仅本地访问 | 无需配置，HTTP 可用 |
+
+**Nginx 反代示例**（配合 `TRUST_PROXY=1`）：
+
+```nginx
+server {
+  listen 443 ssl;
+  server_name yourblog.com;
+  ssl_certificate     /etc/letsencrypt/live/yourblog.com/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/yourblog.com/privkey.pem;
+
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;  # 关键：让 Node 知道外层是 HTTPS
+  }
+}
+```
+
+**Caddy 反代示例**（Caddy 自动申请证书，`TRUST_PROXY=1` 同样适用）：
+
+```caddyfile
+yourblog.com {
+  reverse_proxy localhost:3000
+}
+```
 
 ## 项目结构
 

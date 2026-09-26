@@ -7,7 +7,6 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - COOKIE_SECURE=false
     volumes:
       - ./data:/app/data
     deploy:
