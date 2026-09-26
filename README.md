@@ -94,7 +94,7 @@ npm start
 | `DB_PATH` | 否 | `./data/blog.sqlite` | SQLite 文件路径 |
 | `COOKIE_SECURE` | 否 | 按 `req.secure` | 控制 cookie 是否带 Secure 标志；不显式设时由 `req.secure` 自动判断。详见下文「HTTPS 与 Cookie」。 |
 | `TRUST_PROXY` | 否 | `false` | 反代层数（`true` / `false` / 数字 / `loopback`）；裸跑保持默认；前置 HTTPS 反代时设为 `1`。详见下文「HTTPS 与 Cookie」。 |
-| `SITE_URL` | 否 | `http://localhost:$PORT` | 邮件中拼接验证链接用的站点根地址；生产环境设为正式域名（如 `https://yourblog.com`）。 |
+| `SITE_URL` | 否 | 自动 | 邮件中拼接验证链接用的站点根地址；生产设正式域名最稳（如 `https://yourblog.com`）。不设时自动跟随当前请求的协议+Host（需前置反代并开 `TRUST_PROXY=1`），否则回落 `http://localhost:$PORT`。 |
 | `NODE_ENV` | 否 | — | `production` 时错误响应只输出消息 |
 
 ### HTTPS 与 Cookie

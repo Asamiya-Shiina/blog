@@ -269,7 +269,7 @@ router.post('/register', writeLimiter, emailRegisterLimiter, async (req, res) =>
       const verifyToken = crypto.randomBytes(24).toString('hex');
       const verifyExpires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       user = await createUser({ username, password: pw, preHashed, role: 'user', email, status: 'pending', verifyToken, verifyExpires });
-      const result = await mailer.sendVerifyEmail(verifyToken, email, username);
+      const result = await mailer.sendVerifyEmail(verifyToken, email, username, req);
       if (!result.sent && process.env.NODE_ENV !== 'production') {
         // 仅在非生产环境把激活链接打到日志（开发时 SMTP 未配置也能激活），
         // 生产环境不输出 token，避免验证令牌泄露给日志读取者

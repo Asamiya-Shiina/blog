@@ -20,14 +20,21 @@ function getSmtpConfig() {
   return { ...cfg, pass: plain };
 }
 
-// 站点根地址,用于拼验证链接;可用 SITE_URL 覆盖
-function baseUrl() {
+// 站点根地址,用于拼验证链接。
+// 优先级：① SITE_URL 显式覆盖 → ② 请求本身（req.protocol / req.host,
+// 前置 HTTPS 反代 + TRUST_PROXY=1 时会还原出 https://你的域名）→ ③ 本地 localhost 兜底
+function baseUrl(req) {
   const hint = process.env.SITE_URL;
   if (hint) return hint.replace(/\/$/, '');
+  if (req && req.get) {
+    const host = req.get('host');
+    if (host) return `${req.protocol || 'http'}://${host}`.replace(/\/$/, '');
+  }
   return 'http://localhost:' + (process.env.PORT || '3000');
 }
 
-async function sendVerifyEmail(token, toEmail, username) {
+// req 为可选：传入时邮箱链接会自动跟随当前访问的域名/协议；不传则回落到 SITE_URL 或 localhost
+async function sendVerifyEmail(token, toEmail, username, req) {
   const cfg = getSmtpConfig();
   if (!cfg) return { sent: false };
 
@@ -46,7 +53,7 @@ async function sendVerifyEmail(token, toEmail, username) {
   } else {
     sender = `${sender} <${cfg.user}>`;
   }
-  const link = `${baseUrl()}/api/verify?token=${encodeURIComponent(token)}`;
+  const link = `${baseUrl(req)}/api/verify?token=${encodeURIComponent(token)}`;
 
   try {
     await transport.sendMail({
