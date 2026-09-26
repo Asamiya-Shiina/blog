@@ -28,8 +28,9 @@
 - bcrypt 哈希（cost 12，前端先 SHA-256 解决 72 字节限制）
 - Zod 校验 + DOMPurify HTML 消毒
 - 登录 / 注册 / 写入 / 搜索 / Setup 全链路速率限制
-- CSP / HSTS / nosniff / X-Frame-Options / Permissions-Policy
+- CSP（script-src 'self'、style-src-attr 'none'）/ HSTS / nosniff / X-Frame-Options / Permissions-Policy
 - 防用户名枚举、统一错误消息、关键操作审计日志
+- 不使用任何 inline `<script>` / `onclick` / `style` 属性——所有交互走外置脚本，所有样式走 CSS 类，符合 CSP
 
 ## 角色权限
 
