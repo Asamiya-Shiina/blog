@@ -57,7 +57,11 @@ async function sendVerifyEmail(token, toEmail, username) {
     });
     return { sent: true };
   } catch (e) {
-    console.warn('sendVerifyEmail failed:', e.message);
+    // 错误日志脱敏：仅输出 SMTP code 与 message，避免泄露 envelope、附件、堆栈等敏感信息
+    // （nodemailer 错误对象可能含 SMTP envelope，包含完整收发件人；非生产排查所需）
+    const code = e && (e.code || (e.responseCode != null ? String(e.responseCode) : ''));
+    const msg = (e && e.message) ? String(e.message).slice(0, 200) : 'unknown';
+    console.warn(`sendVerifyEmail failed: ${code ? `[${code}] ` : ''}${msg}`);
     return { sent: false };
   } finally {
     transport.close();
