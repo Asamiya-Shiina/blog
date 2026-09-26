@@ -401,6 +401,8 @@ a { color: inherit; }
   body {
     overflow: hidden;
     background-position: 60% center;
+    /* 阻止 iOS 在横竖屏切换时自动缩放字体 */
+    -webkit-text-size-adjust: 100%;
   }
   body::before {
     top: 12px; right: 12px; bottom: 12px; left: 12px;

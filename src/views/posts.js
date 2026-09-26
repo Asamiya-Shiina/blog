@@ -264,6 +264,8 @@ const SHARED_HEAD = `
     @media (max-width: 560px) {
       header.hero h1 { font-size: 32px; }
       .post-head h1   { font-size: 28px; }
+      /* 摘要默认 nowrap 是为桌面一行展示；手机窄屏下放行换行，避免长句撑破容器 */
+      .post-head .excerpt { white-space: normal; word-break: break-word; font-size: 16px; }
       .post-card h2   { font-size: 20px; }
     }
   </style>

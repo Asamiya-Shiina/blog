@@ -49,6 +49,12 @@
     .error { color: #dc2626; font-size: 13px; margin-top: 6px; min-height: 1em; }
     .login-hint { background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2); border-radius: 10px; padding: 14px 18px; color: var(--fg); }
     .login-hint a { color: var(--accent); text-decoration: none; font-weight: 500; }
+    /* —— 手机：收紧留白与卡片边距，让留言占满屏宽 —— */
+    @media (max-width: 560px) {
+      .wrap { margin: 28px auto; padding: 0 16px 56px; }
+      .card { padding: 18px 16px; }
+      .topbar { margin-bottom: 16px; }
+    }
   </style>
 </head>
 <body>
