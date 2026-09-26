@@ -38,31 +38,17 @@
         rowsEl.innerHTML = '<tr><td colspan="5" class="empty">没有文章。<a href="/managers/editor">写一篇 →</a></td></tr>';
       } else {
         rowsEl.innerHTML = data.items.map(p => `
-          <tr class="row" onclick="window.location.href='/managers/editor?id=${p.id}'">
+          <tr class="row" data-id="${p.id}">
             <td><strong>${escapeHtml(p.title)}</strong>${p.excerpt ? `<div style="color:var(--muted);font-size:12px;margin-top:2px">${escapeHtml(p.excerpt)}</div>` : ''}</td>
             <td><span class="tag ${p.status === 'published' ? 'tag-published' : 'tag-draft'}">${p.status === 'published' ? '已发布' : '草稿'}</span></td>
             <td>${(p.categories || []).map(c => `<span class="tag">${escapeHtml(c.name)}</span>`).join(' ') || '<span style="color:var(--muted);font-size:12px">—</span>'}</td>
             <td style="color:var(--muted);font-size:13px">${(p.updated_at || '').replace('T', ' ').slice(0, 16)}</td>
             <td style="text-align:right">
-              <button class="btn btn-ghost" onclick="event.stopPropagation(); window.location.href='/managers/editor?id=${p.id}'">编辑</button>
+              <button class="btn btn-ghost btn-edit" data-id="${p.id}">编辑</button>
               <button class="btn btn-danger" data-id="${p.id}" data-title="${escapeHtml(p.title)}">删除</button>
             </td>
           </tr>
         `).join('');
-        rowsEl.querySelectorAll('.btn-danger').forEach(b => {
-          b.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const id = b.dataset.id;
-            const title = b.dataset.title;
-            if (!confirm(`确定删除《${title}》？此操作不可恢复。`)) return;
-            try {
-              await api('DELETE', '/api/posts/' + id);
-              load();
-            } catch (err) {
-              alert('删除失败：' + err.message);
-            }
-          });
-        });
       }
       const totalPages = Math.max(1, Math.ceil(data.total / data.page_size));
       pageInfo.textContent = `第 ${page} / ${totalPages} 页 · 共 ${data.total} 篇`;
@@ -79,6 +65,22 @@
   categoryEl.addEventListener('change', () => { page = 1; load(); });
   prevBtn.addEventListener('click', () => { page--; load(); });
   nextBtn.addEventListener('click', () => { page++; load(); });
+
+  // 行点击 / 编辑 / 删除统一事件委托。
+  // 不能用内联 onclick —— 全站 CSP `script-src 'self'` 会拦截内联事件处理器,
+  // 上一版编辑/行点击的 onclick 就是这样被静默拒绝而"没反应"的。
+  rowsEl.addEventListener('click', (e) => {
+    const edit = e.target.closest('.btn-edit');
+    const del  = e.target.closest('.btn-danger');
+    if (edit) { window.location.href = '/managers/editor?id=' + edit.dataset.id; return; }
+    if (del) {
+      if (!confirm(`确定删除《${del.dataset.title}》？此操作不可恢复。`)) return;
+      api('DELETE', '/api/posts/' + del.dataset.id).then(load).catch(err => alert('删除失败：' + err.message));
+      return;
+    }
+    const row = e.target.closest('tr.row');
+    if (row) window.location.href = '/managers/editor?id=' + row.dataset.id;
+  });
 
   load();
 })();
