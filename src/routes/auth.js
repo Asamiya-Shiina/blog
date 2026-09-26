@@ -41,7 +41,8 @@ const router = express.Router();
 // 头像目录与限制（与 server.js 的 /avatar 静态挂载保持一致）
 const AVATAR_DIR = path.join(__dirname, '..', '..', 'data', 'uploads', 'avatars');
 fs.mkdirSync(AVATAR_DIR, { recursive: true });
-const AVATAR_MIME = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif' };
+// 头像只允许 JPG（站点规范），其余格式直接拒绝
+const AVATAR_MIME = { 'image/jpeg': '.jpg' };
 const AVATAR_MAX = 100 * 1024; // 头像上限 100KB
 
 // 校验图片文件头几个字节（magic number）是否与声称的 MIME 一致。
@@ -509,7 +510,7 @@ router.patch('/me', requireAuth, (req, res) => {
   });
 });
 
-// POST /api/me/avatar：上传自己的头像（≤100KB，png/jpeg/webp/gif）
+// POST /api/me/avatar：上传自己的头像（仅 JPG，≤100KB）
 router.post('/me/avatar', requireAuth, writeLimiter, async (req, res) => {
   let form;
   try {
@@ -525,7 +526,7 @@ router.post('/me/avatar', requireAuth, writeLimiter, async (req, res) => {
   if (!file || typeof file === 'string') return res.status(400).json({ error: 'file is required' });
   const mime = (file.type || '').toLowerCase();
   const ext = AVATAR_MIME[mime];
-  if (!ext) return res.status(400).json({ error: 'unsupported image type' });
+  if (!ext) return res.status(400).json({ error: '头像仅支持 JPG 格式' });
   const buf = Buffer.from(await file.arrayBuffer());
   if (buf.length === 0) return res.status(400).json({ error: 'empty file' });
   if (buf.length > AVATAR_MAX) return res.status(413).json({ error: 'avatar too large (max 100KB)' });

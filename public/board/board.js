@@ -35,6 +35,8 @@ function renderMessage(m, isChild) {
   wrap.dataset.id = m.id;
 
   const tag = roleTagLabel(m.role) ? `<span class="role-tag ${roleTagClass(m.role)}">${roleTagLabel(m.role)}</span>` : '';
+  // 优先展示个人主页昵称，未设置时退回账号名
+  const displayName = m.name || m.username;
   const avatar = m.avatar_url
     ? `<img class="avatar" src="${escapeHtml(m.avatar_url)}" alt="" />`
     : `<div class="avatar" aria-hidden="true"></div>`;
@@ -50,7 +52,7 @@ function renderMessage(m, isChild) {
     <div class="meta">
       ${avatar}
       <div class="meta-text">
-        <span class="name">${escapeHtml(m.username)}</span>${tag}
+        <span class="name">${escapeHtml(displayName)}</span>${tag}
         <span class="time-loc">${formatTime(m.created_at)}${loc ? ' · ' + loc : ''}</span>
         ${ipAdmin}
       </div>
@@ -58,7 +60,7 @@ function renderMessage(m, isChild) {
     <div class="content">${escapeHtml(m.content)}</div>
     <div class="actions">${actions.join('')}</div>
     <div class="reply-form" data-parent="${m.id}">
-      <textarea placeholder="回复 ${escapeHtml(m.username)}…" maxlength="2000"></textarea>
+      <textarea placeholder="回复 ${escapeHtml(displayName)}…" maxlength="2000"></textarea>
       <div class="error"></div>
       <div class="actions-row">
         <button class="btn btn-sm reply-submit">发送</button>

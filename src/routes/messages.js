@@ -36,6 +36,7 @@ function shapeMessage(row, viewer) {
     parent_id: row.parent_id,
     user_id: row.user_id,
     username: row.username,
+    name: row.name,            // 个人主页昵称（前台优先展示），未设置时为空
     role: row.role,
     avatar_url: row.avatar_filename ? `/avatar/${encodeURIComponent(row.avatar_filename)}` : null,
     content: row.content,
@@ -48,7 +49,7 @@ function shapeMessage(row, viewer) {
 
 const SELECT_SQL = `
   SELECT m.id, m.user_id, m.parent_id, m.content, m.ip, m.created_at,
-         u.username, u.role, u.avatar_filename
+         u.username, u.name, u.role, u.avatar_filename
     FROM messages m
     JOIN users u ON u.id = m.user_id
 `;
