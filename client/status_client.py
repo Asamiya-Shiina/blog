@@ -327,7 +327,7 @@ class StatusClient:
             return
 
         app_name = self.resolve_app_name(win["process_name"])
-        if process_lower == "explorer" and win["title"] == "Program Manager":
+        if process_lower == "explorer" and (win["title"] == "Program Manager" or not win["title"].strip()):
             app_name = "桌面"
         elif process_lower == "windowsterminal":
             app_name = "消耗Token死命调试中...."
