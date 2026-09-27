@@ -32,6 +32,8 @@ const rateLimit = require('express-rate-limit');
 
 const db = require('./src/db');
 const audit = require('./src/audit');
+require('./src/avatar-sweep');  // 加载即启动孤儿头像/音乐/WAL 清理定时器
+require('./src/db-sweep');      // 加载即启动 page_views / pending users 清理定时器
 const authRoutes = require('./src/routes/auth');
 const postsRoutes = require('./src/routes/posts');
 const musicRoutes = require('./src/routes/music');
