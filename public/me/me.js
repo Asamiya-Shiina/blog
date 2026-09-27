@@ -65,7 +65,7 @@
     if (!file) return;
     const msg = $('profile-msg');
     msg.className = 'msg';
-    if (file.size > 100 * 1024) { msg.textContent = '头像超过 100KB，请压缩后再上传'; msg.className = 'msg bad'; return; }
+    if (file.size > 200 * 1024) { msg.textContent = '头像超过 200KB，请压缩后再上传'; msg.className = 'msg bad'; return; }
     const fd = new FormData();
     fd.append('file', file);
     try {

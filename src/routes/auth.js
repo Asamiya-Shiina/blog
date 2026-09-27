@@ -43,7 +43,7 @@ const AVATAR_DIR = path.join(__dirname, '..', '..', 'data', 'uploads', 'avatars'
 fs.mkdirSync(AVATAR_DIR, { recursive: true });
 // 头像只允许 JPG（站点规范），其余格式直接拒绝
 const AVATAR_MIME = { 'image/jpeg': '.jpg' };
-const AVATAR_MAX = 100 * 1024; // 头像上限 100KB
+const AVATAR_MAX = 200 * 1024; // 头像上限 200KB
 
 // 校验图片文件头几个字节（magic number）是否与声称的 MIME 一致。
 // 客户端可以随意改 Content-Type，但 buffer 前几字节由文件本身决定，
@@ -510,7 +510,9 @@ router.patch('/me', requireAuth, (req, res) => {
   });
 });
 
-// POST /api/me/avatar：上传自己的头像（仅 JPG，≤100KB）
+// POST /api/me/avatar：上传自己的头像（仅 JPG，≤200KB）
+// 落盘流程：写临时文件 → 事务里 SELECT+UPDATE → rename 原子切换 → 异步删旧
+// rename 在同文件系统内原子，DB 永远不会指向不存在的文件
 router.post('/me/avatar', requireAuth, writeLimiter, async (req, res) => {
   let form;
   try {
@@ -529,7 +531,7 @@ router.post('/me/avatar', requireAuth, writeLimiter, async (req, res) => {
   if (!ext) return res.status(400).json({ error: '头像仅支持 JPG 格式' });
   const buf = Buffer.from(await file.arrayBuffer());
   if (buf.length === 0) return res.status(400).json({ error: 'empty file' });
-  if (buf.length > AVATAR_MAX) return res.status(413).json({ error: 'avatar too large (max 100KB)' });
+  if (buf.length > AVATAR_MAX) return res.status(413).json({ error: 'avatar too large (max 200KB)' });
   // magic byte 校验：客户端声明的 MIME 必须与文件实际内容相符
   // 防止传 .png 扩展但内容是 HTML/SVG/可执行文件
   if (!checkImageMagic(mime, buf)) {
@@ -537,19 +539,29 @@ router.post('/me/avatar', requireAuth, writeLimiter, async (req, res) => {
   }
 
   const storedName = crypto.randomUUID() + ext;
+  const tmpName = storedName + '.tmp';
   try {
-    await fs.promises.writeFile(path.join(AVATAR_DIR, storedName), buf);
+    // 1. 写临时文件（半成品，不可见）
+    await fs.promises.writeFile(path.join(AVATAR_DIR, tmpName), buf);
+    // 2. 事务里换 DB 指针（同步：better-sqlite3 事务是同步 API）
+    const prev = db.transaction(() => {
+      const row = db.prepare('SELECT avatar_filename FROM users WHERE id = ?').get(req.user.id);
+      db.prepare('UPDATE users SET avatar_filename = ? WHERE id = ?').run(storedName, req.user.id);
+      return row;
+    })();
+    // 3. 原子切换：rename 同 FS 内原子，DB 已指新文件名，磁盘新文件保证存在
+    await fs.promises.rename(path.join(AVATAR_DIR, tmpName), path.join(AVATAR_DIR, storedName));
+    // 4. 异步删旧文件，失败不影响响应
+    if (prev && prev.avatar_filename) {
+      fs.promises.unlink(path.join(AVATAR_DIR, prev.avatar_filename)).catch(() => {});
+    }
+    return res.status(201).json({ avatar_url: `/avatar/${storedName}` });
   } catch (e) {
-    console.error('avatar write failed:', e);
-    return res.status(500).json({ error: 'failed to write file' });
+    console.error('avatar upload failed:', e);
+    // 兜底：清理可能残留的 tmp（不影响已存在的旧文件或新文件）
+    fs.promises.unlink(path.join(AVATAR_DIR, tmpName)).catch(() => {});
+    return res.status(500).json({ error: 'failed to upload avatar' });
   }
-  const prev = db.prepare('SELECT avatar_filename FROM users WHERE id = ?').get(req.user.id);
-  db.prepare('UPDATE users SET avatar_filename = ? WHERE id = ?').run(storedName, req.user.id);
-  // 异步删旧头像，失败不影响响应
-  if (prev && prev.avatar_filename) {
-    fs.promises.unlink(path.join(AVATAR_DIR, prev.avatar_filename)).catch(() => {});
-  }
-  res.status(201).json({ avatar_url: `/avatar/${storedName}` });
 });
 
 // —— 用户管理（仅管理员） ——
