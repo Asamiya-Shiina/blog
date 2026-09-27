@@ -8,7 +8,7 @@ services:
     environment:
       - NODE_ENV=production
       - TRUST_PROXY=1
-      - NODE_OPTIONS=--max-old-space-size=128
+      - NODE_OPTIONS=--max-old-space-size=96 --max-semi-space-size=8
     volumes:
       - ./data:/app/data
     deploy:
