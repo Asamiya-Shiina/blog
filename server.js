@@ -410,7 +410,7 @@ app.get(['/status', '/status/'], (_req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 根级资源：首页、图片、音频（显式列出，避免暴露 data/、node_modules/）
-app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index', 'index.html')));
 app.use('/image', express.static(path.join(__dirname, 'image')));
 // 音频从 data/uploads/music 提供（与管理上传目录保持一致）
 app.use('/audio', express.static(MUSIC_DIR));
