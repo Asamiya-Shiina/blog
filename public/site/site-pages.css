@@ -1,9 +1,7 @@
-﻿__CSS_COMMENT_
+.back-row {
+     margin-bottom: 32px; 
+    }
 
-__CSS_COMMENT_
-.back-row { margin-bottom: 32px; }
-
-__CSS_COMMENT_
 header.hero {
   margin-bottom: 56px;
   animation: fadeUp 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both;
@@ -57,7 +55,6 @@ header.hero p {
   margin: 0;
 }
 
-__CSS_COMMENT_
 .post-cats { margin-left: 10px; }
 .cat-tag {
   display: inline-block;
@@ -77,7 +74,6 @@ __CSS_COMMENT_
   border-color: var(--accent);
 }
 
-__CSS_COMMENT_
 .posts-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 200px;
@@ -127,7 +123,6 @@ __CSS_COMMENT_
   font-variant-numeric: tabular-nums;
 }
 
-__CSS_COMMENT_
 .post-head {
   margin-bottom: 32px;
   animation: fadeUp 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both;
@@ -138,7 +133,7 @@ __CSS_COMMENT_
   gap: 14px;
 }
 .post-head h1 {
-  __CSS_COMMENT_
+  /* 花体（楷体）中文字体并倾斜 */
   font-family: "STXinwei", "华文新魏", "FZXingKai-S05", "STKaiti", "华文楷体", serif;
   font-style: italic;
   font-weight: 400;
@@ -233,7 +228,6 @@ __CSS_COMMENT_
   animation: fadeUp 0.9s 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
-__CSS_COMMENT_
 .empty {
   text-align: center;
   color: var(--muted);
@@ -246,8 +240,6 @@ __CSS_COMMENT_
   border-bottom: 1px solid rgba(59,130,246,0.3);
 }
 
-__CSS_COMMENT_
-__CSS_COMMENT_
 body.searched header.hero,
 body.searched header.hero p,
 body.searched .search-form,
@@ -291,7 +283,6 @@ body.searched .player { animation: none; }
 .search-form button:hover { background: var(--accent-dark); }
 .search-form button:active { transform: scale(0.97); }
 
-__CSS_COMMENT_
 .notice {
   position: relative;
   z-index: 1;
@@ -323,7 +314,6 @@ __CSS_COMMENT_
 }
 .notice a:hover { border-bottom-color: var(--accent); }
 
-__CSS_COMMENT_
 .status-hero {
   animation: fadeUp 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
@@ -371,9 +361,10 @@ __CSS_COMMENT_
 }
 .status-icon-wrap.active { background: rgba(59, 130, 246, 0.1); }
 
-.status-info 
-flex: 1
-min-width: 0
+.status-info {
+  flex: 1;
+  min-width: 0;
+}
 
 
 .status-app-name {
@@ -438,7 +429,6 @@ min-width: 0
   padding: 20px 0;
 }
 
-__CSS_COMMENT_
 .verify-page {
   margin: 0;
   padding: 0;
@@ -536,7 +526,6 @@ __CSS_COMMENT_
 }
 .verify-page .btn-ghost:hover { color: var(--fg); }
 
-__CSS_COMMENT_
 .not-found-page {
   display: flex;
   align-items: center;
@@ -569,7 +558,7 @@ __CSS_COMMENT_
 }
 .not-found-page .not-found a:hover { border-bottom-color: var(--accent); }
 
-__CSS_COMMENT_
+/* —— 响应式 —— */
 @media (max-width: 560px) {
   header.hero h1 { font-size: 32px; }
   .post-head h1   { font-size: 28px; }
@@ -617,14 +606,15 @@ __CSS_COMMENT_
   .not-found-page .not-found h1 { font-size: 42px; }
 }
 
-__CSS_COMMENT_
+/* fadeUp 入场动画（与 site.css 同步） */
 @keyframes fadeUp {
-  from 
-opacity: 0
-transform: translateY(14px)
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
 
-  to   
-opacity: 1
-transform: translateY(0)
-
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

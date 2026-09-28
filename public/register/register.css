@@ -1,4 +1,3 @@
-﻿__CSS_COMMENT_
 :root {
   --fg: #1a1a1a;
   --muted: #6b6b6b;
@@ -104,9 +103,10 @@ input:focus {
 }
 .submit:hover { background: #2563eb; }
 .submit:active { transform: scale(0.98); }
-.submit:disabled 
-opacity: 0.6
-cursor: not-allowed
+.submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 .error {
   color: #b91c1c;
@@ -140,7 +140,6 @@ cursor: not-allowed
 }
 .foot a:hover { color: var(--fg); }
 
-__CSS_COMMENT_
 .captcha { margin: 0 0 16px; }
 .captcha-label {
   display: block;
@@ -208,12 +207,13 @@ __CSS_COMMENT_
   to   { opacity: 1; }
 }
 @keyframes fadeUp {
-  from 
-opacity: 0
-transform: translateY(14px)
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
 
-  to   
-opacity: 1
-transform: translateY(0)
-
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
