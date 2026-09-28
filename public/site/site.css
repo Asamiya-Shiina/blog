@@ -1,4 +1,4 @@
-/* —— 共享设计令牌 —— */
+/* 鈥斺€?鍏变韩璁捐浠ょ墝 鈥斺€?*/
 :root {
   --fg: #1a1a1a;
   --muted: #6b6b6b;
@@ -28,7 +28,7 @@ body {
   overflow: hidden;
 }
 
-/* 主页一样的玻璃卡蒙版：四边留缝、圆角、毛玻璃 */
+/* 涓婚〉涓€鏍风殑鐜荤拑鍗¤挋鐗堬細鍥涜竟鐣欑紳銆佸渾瑙掋€佹瘺鐜荤拑 */
 body::before {
   content: '';
   position: fixed;
@@ -43,7 +43,10 @@ body::before {
   z-index: 0;
 }
 
-.wrap { position: relative; z-index: 1; }
+.wrap {
+  position: relative;
+  z-index: 1;
+}
 
 *, *::before, *::after {
   -webkit-user-select: none;
@@ -68,10 +71,10 @@ body::before {
 .wrap.wide { max-width: 980px; }
 .wrap.narrow { max-width: 640px; }
 
-/* —— 通用：链接 —— */
+/* 鈥斺€?閫氱敤锛氶摼鎺?鈥斺€?*/
 a { color: inherit; }
 
-/* —— 通用：小卡片按钮（返回 / 操作） —— */
+/* 鈥斺€?閫氱敤锛氬皬鍗＄墖鎸夐挳锛堣繑鍥?/ 鎿嶄綔锛?鈥斺€?*/
 .chip {
   display: inline-flex;
   align-items: center;
@@ -89,13 +92,22 @@ a { color: inherit; }
   transition: background 0.2s ease, transform 0.15s ease;
   animation: fadeUp 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
-.chip:hover { background: rgba(255, 255, 255, 0.88); transform: translateY(-1px); }
+.chip:hover {
+  background: rgba(255, 255, 255, 0.88);
+  transform: translateY(-1px);
+}
 .chip:active { transform: translateY(0) scale(0.98); }
 
-/* —— 动效 —— */
+/* 鈥斺€?鍔ㄦ晥 鈥斺€?*/
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+  opacity: 0;
+  transform: translateY(14px);
+}
+  to {
+  opacity: 1;
+  transform: translateY(0);
+}
 }
 
 .reveal {
@@ -116,10 +128,13 @@ a { color: inherit; }
     animation-delay: 0ms !important;
     transition-duration: 0.001ms !important;
   }
-  .reveal { opacity: 1; transform: none; }
+  .reveal {
+  opacity: 1;
+  transform: none;
+}
 }
 
-/* —— 顶部菜单 —— */
+/* 鈥斺€?椤堕儴鑿滃崟 鈥斺€?*/
 .nav-toggle {
   position: fixed;
   top: 36px;
@@ -191,9 +206,12 @@ a { color: inherit; }
   font-size: 15px;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.nav-menu a:hover { background: rgba(0, 0, 0, 0.05); color: var(--muted); }
+.nav-menu a:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--muted);
+}
 
-/* —— 登录按钮 —— */
+/* 鈥斺€?鐧诲綍鎸夐挳 鈥斺€?*/
 .login-btn {
   position: fixed;
   top: 36px; right: 36px;
@@ -238,7 +256,7 @@ a { color: inherit; }
 }
 .login-btn:hover::before { left: 130%; }
 
-/* —— 用户头像（登录后右上角替代登录按钮）—— */
+/* 鈥斺€?鐢ㄦ埛澶村儚锛堢櫥褰曞悗鍙充笂瑙掓浛浠ｇ櫥褰曟寜閽級鈥斺€?*/
 .user-avatar {
   position: fixed;
   top: 36px; right: 36px;
@@ -277,7 +295,7 @@ a { color: inherit; }
   user-select: none;
 }
 
-/* —— 搜索按钮 —— */
+/* 鈥斺€?鎼滅储鎸夐挳 鈥斺€?*/
 .search-btn {
   position: fixed;
   top: 36px; right: 36px;
@@ -304,7 +322,7 @@ a { color: inherit; }
   stroke-linecap: round;
 }
 
-/* —— 播放器 —— */
+/* 鈥斺€?鎾斁鍣?鈥斺€?*/
 .player {
   position: fixed;
   left: 36px; bottom: 36px;
@@ -342,9 +360,21 @@ a { color: inherit; }
   align-items: center;
   justify-content: center;
 }
-.player-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.player-cover svg { width: 26px; height: 26px; fill: var(--muted); }
-.player-info { flex: 1; min-width: 0; }
+.player-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.player-cover svg {
+  width: 26px;
+  height: 26px;
+  fill: var(--muted);
+}
+.player-info {
+  flex: 1;
+  min-width: 0;
+}
 .player-title {
   font-size: 14px;
   font-weight: 600;
@@ -383,7 +413,11 @@ a { color: inherit; }
 }
 .player-btn:hover { transform: scale(1.06); }
 .player-btn:active { transform: scale(0.94); }
-.player-btn svg { width: 14px; height: 14px; fill: #fff; }
+.player-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: #fff;
+}
 .player-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -396,12 +430,12 @@ a { color: inherit; }
 .player-btn.is-playing .icon-play { display: none; }
 .player-btn.is-playing .icon-pause { display: block; }
 
-/* —— 手机响应 —— */
+/* 鈥斺€?鎵嬫満鍝嶅簲 鈥斺€?*/
 @media (max-width: 560px) {
   body {
     overflow: hidden;
     background-position: 60% center;
-    /* 阻止 iOS 在横竖屏切换时自动缩放字体 */
+    /* 闃绘 iOS 鍦ㄦí绔栧睆鍒囨崲鏃惰嚜鍔ㄧ缉鏀惧瓧浣?*/
     -webkit-text-size-adjust: 100%;
   }
   body::before {
@@ -417,14 +451,33 @@ a { color: inherit; }
     border-radius: 0 0 14px 14px;
   }
   .wrap.wide { max-width: none; }
-  /* 360 宽屏下 h1=34px 仍会溢出，缩到 28px */
-  header.hero h1 { font-size: 28px; line-height: 1.25; }
+  /* 360 瀹藉睆涓?h1=34px 浠嶄細婧㈠嚭锛岀缉鍒?28px */
+  header.hero h1 {
+  font-size: 28px;
+  line-height: 1.25;
+}
   .skills ul { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
 
-  .nav-toggle { top: 22px; left: 22px; }
-  .nav-menu   { top: 68px; left: 22px; }
-  .login-btn    { top: 22px; right: 22px; padding: 8px 18px; }
-  .user-avatar  { top: 22px; right: 22px; width: 38px; height: 38px; font-size: 16px; }
+  .nav-toggle {
+  top: 22px;
+  left: 22px;
+}
+  .nav-menu {
+  top: 68px;
+  left: 22px;
+}
+  .login-btn {
+  top: 22px;
+  right: 22px;
+  padding: 8px 18px;
+}
+  .user-avatar {
+  top: 22px;
+  right: 22px;
+  width: 38px;
+  height: 38px;
+  font-size: 16px;
+}
 
   .player {
     left: 20px; bottom: 20px; right: 20px;
@@ -435,7 +488,7 @@ a { color: inherit; }
   }
 }
 
-/* —— 实时状态卡片（首页） —— */
+/* 鈥斺€?瀹炴椂鐘舵€佸崱鐗囷紙棣栭〉锛?鈥斺€?*/
 .status-card {
   margin-top: 28px;
 }
@@ -506,7 +559,7 @@ a { color: inherit; }
   font-size: 14px;
 }
 
-/* 多设备显示 */
+/* 澶氳澶囨樉绀?*/
 .status-device {
   display: flex;
   align-items: center;
