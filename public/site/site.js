@@ -2,6 +2,7 @@
 
 (() => {
   // 滚动揭示：为带有 .reveal 类名的元素添加 IntersectionObserver 动画
+  const targets = document.querySelectorAll('.reveal');
   if (!('IntersectionObserver' in window)) {
     targets.forEach(el => el.classList.add('is-visible'));
   } else {
