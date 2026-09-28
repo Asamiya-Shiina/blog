@@ -1,14 +1,19 @@
+/* 初始化设置页样式 */
+
+/* —— 设计令牌 —— */
 :root {
   --fg: #1a1a1a;
   --muted: #6b6b6b;
   --accent: #3b82f6;
   --accent-dark: #2563eb;
 }
-* 
-box-sizing: border-box
-margin: 0
-padding: 0
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
+/* —— 全局：垂直水平居中卡片 + 字体 + 照片底图 + 蒙版 —— */
 body {
   min-height: 100vh;
   display: flex;
@@ -28,6 +33,8 @@ body::before {
   -webkit-backdrop-filter: blur(8px) saturate(120%);
   z-index: 0;
 }
+
+/* —— 卡片（毛玻璃） —— */
 .card {
   position: relative;
   z-index: 1;
@@ -53,6 +60,8 @@ body::before {
     transform: translateY(0);
   }
 }
+
+/* —— 标题与副标题 —— */
 h1 {
   font-family: Georgia, "Times New Roman", "Songti SC", serif;
   font-weight: 400;
@@ -64,6 +73,8 @@ h1 {
   font-size: 14px;
   margin-bottom: 28px;
 }
+
+/* —— 表单字段（label + 输入框 + 聚焦光晕） —— */
 label {
   display: block;
   font-size: 13px;
@@ -87,6 +98,8 @@ input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
+
+/* —— 提交按钮（hover 抬升 + box-shadow） —— */
 button {
   width: 100%;
   padding: 12px;
@@ -112,6 +125,8 @@ button:disabled {
   transform: none;
   box-shadow: none;
 }
+
+/* —— 错误提示（min-height 防止抖动） —— */
 .error {
   color: #dc2626;
   font-size: 13px;

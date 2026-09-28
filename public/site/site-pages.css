@@ -1,6 +1,10 @@
+/* ========== 通用：返回行 ========== */
+
 .back-row {
-     margin-bottom: 32px; 
+     margin-bottom: 32px;
     }
+
+/* ========== Hero 标题（列表/详情共用） ========== */
 
 header.hero {
   margin-bottom: 56px;
@@ -20,6 +24,8 @@ header.hero p {
   max-width: 32em;
   animation: fadeUp 0.9s 0.15s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
+
+/* ========== 文章卡片（列表） ========== */
 
 .post-card {
   padding: 22px 0;
@@ -55,6 +61,8 @@ header.hero p {
   margin: 0;
 }
 
+/* ========== 分类标签（卡片尾部） ========== */
+
 .post-cats { margin-left: 10px; }
 .cat-tag {
   display: inline-block;
@@ -73,6 +81,8 @@ header.hero p {
   color: var(--fg);
   border-color: var(--accent);
 }
+
+/* ========== 列表布局：主区 + 侧栏 ========== */
 
 .posts-layout {
   display: grid;
@@ -123,6 +133,8 @@ header.hero p {
   font-variant-numeric: tabular-nums;
 }
 
+/* ========== 文章详情头 ========== */
+
 .post-head {
   margin-bottom: 32px;
   animation: fadeUp 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both;
@@ -162,6 +174,8 @@ header.hero p {
   font-variant-numeric: tabular-nums;
   margin-top: 14px;
 }
+
+/* ========== 文章正文（Markdown 渲染） ========== */
 
 .post-content {
   font-size: 17px;
@@ -221,12 +235,16 @@ header.hero p {
   margin: 2em 0;
 }
 
+/* ========== 文章页脚分隔线 ========== */
+
 .post-foot {
   margin-top: 56px;
   padding-top: 20px;
   border-top: 1px solid var(--line);
   animation: fadeUp 0.9s 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
+
+/* ========== 空状态提示 ========== */
 
 .empty {
   text-align: center;
@@ -239,6 +257,8 @@ header.hero p {
   text-decoration: none;
   border-bottom: 1px solid rgba(59,130,246,0.3);
 }
+
+/* ========== 搜索页：关闭动画 + 搜索表单 ========== */
 
 body.searched header.hero,
 body.searched header.hero p,
@@ -283,6 +303,8 @@ body.searched .player { animation: none; }
 .search-form button:hover { background: var(--accent-dark); }
 .search-form button:active { transform: scale(0.97); }
 
+/* ========== 通知页（notice） ========== */
+
 .notice {
   position: relative;
   z-index: 1;
@@ -313,6 +335,8 @@ body.searched .player { animation: none; }
   transition: border-color 0.2s ease;
 }
 .notice a:hover { border-bottom-color: var(--accent); }
+
+/* ========== 状态页（status-hero / status-panel / 各项） ========== */
 
 .status-hero {
   animation: fadeUp 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both;
@@ -429,6 +453,8 @@ body.searched .player { animation: none; }
   padding: 20px 0;
 }
 
+/* ========== 验证页（verify-page，全屏背景 + 毛玻璃卡片） ========== */
+
 .verify-page {
   margin: 0;
   padding: 0;
@@ -526,6 +552,8 @@ body.searched .player { animation: none; }
 }
 .verify-page .btn-ghost:hover { color: var(--fg); }
 
+/* ========== 404 页面 ========== */
+
 .not-found-page {
   display: flex;
   align-items: center;
@@ -558,7 +586,8 @@ body.searched .player { animation: none; }
 }
 .not-found-page .not-found a:hover { border-bottom-color: var(--accent); }
 
-/* —— 响应式 —— */
+/* ========== 响应式（≤560px） ========== */
+
 @media (max-width: 560px) {
   header.hero h1 { font-size: 32px; }
   .post-head h1   { font-size: 28px; }
@@ -588,33 +617,5 @@ body.searched .player { animation: none; }
   .cat-side-link {
     padding: 5px 12px;
     font-size: 13px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-  }
-  .cat-side-link:hover {
-    background: rgba(0,0,0,0.04);
-    border-color: var(--accent);
-  }
-  .cat-side-link.is-active { border-color: var(--accent); }
-  .status-panel { padding: 24px 20px; }
-  .status-icon-wrap {
-    width: 52px;
-    height: 52px;
-    font-size: 24px;
-  }
-  .status-app-name { font-size: 18px; }
-  .not-found-page .not-found h1 { font-size: 42px; }
-}
-
-/* fadeUp 入场动画（与 site.css 同步） */
-@keyframes fadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }

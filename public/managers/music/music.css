@@ -1,3 +1,5 @@
+/* ========== 上传区（拖拽 / 点击） ========== */
+
 .upload-zone {
   border: 2px dashed rgba(0, 0, 0, 0.15);
   border-radius: 14px;
@@ -20,6 +22,8 @@
 .upload-zone strong { color: var(--fg); }
 .upload-zone input[type=file] { display: none; }
 
+/* ========== 当前曲目横幅 ========== */
+
 .active-banner {
   display: flex;
   align-items: center;
@@ -40,10 +44,12 @@
   font-weight: 500;
 }
 .active-banner .name { font-weight: 600; }
-.active-banner .meta 
-color: var(--muted)
-font-size: 13px
+.active-banner .meta {
+  color: var(--muted);
+  font-size: 13px;
+}
 
+/* ========== 选中标签 ========== */
 
 .tag-active {
   background: rgba(59, 130, 246, 0.15);

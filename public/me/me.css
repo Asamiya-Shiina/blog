@@ -1,8 +1,13 @@
+/* 个人主页样式 */
+
+/* —— 设计令牌 —— */
 :root {
   --fg: #1a1a1a;
   --muted: #6b6b6b;
   --accent: #3b82f6;
 }
+
+/* —— 全局重置 + 字体 —— */
 * { box-sizing: border-box; }
 html, body {
   margin: 0;
@@ -15,6 +20,8 @@ html, body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
+
+/* —— 背景：照片 + 蒙版 —— */
 body {
   background: url('/image/IMG_20250703_100031.jpeg') center/cover no-repeat fixed;
   position: relative;
@@ -30,6 +37,8 @@ body::before {
   pointer-events: none;
   z-index: 0;
 }
+
+/* —— 主容器 —— */
 .wrap {
   position: relative;
   z-index: 1;
@@ -38,13 +47,28 @@ body::before {
   padding: 0 20px 64px;
 }
 
+/* —— 顶部标题栏（含"返回首页 / 退出"链接） —— */
 h1 {
   font-family: Georgia, "Times New Roman", "Songti SC", serif;
   font-weight: 400;
   font-size: 30px;
   margin: 0 0 24px;
 }
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+.top .links { font-size: 13px; }
+.top .links a {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 14px;
+}
+.top .links a:hover { color: var(--fg); }
 
+/* —— 卡片基底（毛玻璃） —— */
 .card {
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(20px) saturate(140%);
@@ -57,6 +81,7 @@ h1 {
   animation: fadeUp 0.8s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
+/* —— 卡片内分节小标题 —— */
 h2 {
   font-family: Georgia, "Times New Roman", "Songti SC", serif;
   font-weight: 400;
@@ -69,13 +94,13 @@ h2 {
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
+/* —— 表单字段 —— */
 label {
   display: block;
   font-size: 13px;
   color: var(--muted);
   margin: 0 0 6px;
 }
-
 input[type=text], input[type=email], textarea, input[type=password], input[type=number] {
   width: 100%;
   padding: 11px 14px;
@@ -98,6 +123,7 @@ input:focus, textarea:focus {
   background: rgba(255, 255, 255, 0.9);
 }
 
+/* —— 按钮（主按钮 + ghost 变体） —— */
 .btn {
   padding: 10px 18px;
   background: var(--accent);
@@ -123,20 +149,23 @@ input:focus, textarea:focus {
 }
 .btn.ghost:hover { color: var(--fg); }
 
+/* —— 表单消息（成功 / 失败提示） —— */
 .msg {
   margin-top: 14px;
   font-size: 14px;
   display: none;
 }
-.msg.ok 
-color: #15803d
-display: block
+.msg.ok {
+  color: #15803d;
+  display: block;
+}
 
-.msg.bad 
-color: #b91c1c
-display: block
+.msg.bad {
+  color: #b91c1c;
+  display: block;
+}
 
-
+/* —— 资料卡片：头像 + 上传操作 + 用户字段 —— */
 .profile-head {
   display: flex;
   gap: 24px;
@@ -173,6 +202,7 @@ display: block
   color: var(--muted);
 }
 
+/* —— 右侧：用户名 / 邮箱 / 创建时间等字段 —— */
 .profile-id {
   flex: 1;
   min-width: 0;
@@ -194,20 +224,7 @@ display: block
   word-break: break-all;
 }
 
-.top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 4px;
-}
-.top .links { font-size: 13px; }
-.top .links a {
-  color: var(--muted);
-  text-decoration: none;
-  margin-left: 14px;
-}
-.top .links a:hover { color: var(--fg); }
-
+/* —— 加载失败占位 —— */
 .fail {
   color: #b91c1c;
   text-align: center;

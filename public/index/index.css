@@ -1,3 +1,5 @@
+/* ========== Hero 标题区 ========== */
+
 header.hero { margin-bottom: 96px; }
 
 h1 {
@@ -18,6 +20,8 @@ header.hero p {
 
 section { margin-bottom: 80px; }
 
+/* ========== 章节小标题 ========== */
+
 h2 {
   font-family: Georgia, "Times New Roman", "Songti SC", serif;
   font-weight: 400;
@@ -30,20 +34,28 @@ h2 {
   border-bottom: 1px solid var(--line);
 }
 
-.about p 
-margin: 0 0 16px
-max-width: 36em
+/* ========== 关于段落 ========== */
 
+.about p {
+  margin: 0 0 16px;
+  max-width: 36em;
+}
+
+
+/* ========== 今日访客 ========== */
 
 .today-visitors {
   margin-top: 32px;
   font-size: 14px;
   color: var(--muted);
 }
-.today-visitors span 
-color: var(--fg)
-font-variant-numeric: tabular-nums
+.today-visitors span {
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
 
+
+/* ========== 技能标签 ========== */
 
 .skills ul {
   list-style: none; padding: 0; margin: 0;
@@ -51,24 +63,31 @@ font-variant-numeric: tabular-nums
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 8px 24px;
 }
-.skills li 
-color: var(--fg)
-padding: 4px 0
-transition: color 0.25s ease, transform 0.25s ease
+.skills li {
+  color: var(--fg);
+  padding: 4px 0;
+  transition: color 0.25s ease, transform 0.25s ease;
+}
 
-.skills li::before 
-content: "·"
-color: var(--muted)
-margin-right: 10px
+.skills li::before {
+  content: "·";
+  color: var(--muted);
+  margin-right: 10px;
+}
 
-.skills li:hover 
-color: var(--muted)
-transform: translateX(2px)
+.skills li:hover {
+  color: var(--muted);
+  transform: translateX(2px);
+}
 
+
+/* ========== 入场动画 ========== */
 
 .hero { animation: fadeUp 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
 .hero h1 { animation-delay: 0.05s; }
 .hero p  { animation-delay: 0.25s; }
+
+/* ========== 页脚 ========== */
 
 footer {
   margin-top: 96px;
@@ -92,6 +111,8 @@ footer a, footer a * {
   -ms-user-select: text;
   user-select: text;
 }
+
+/* ========== 响应式（≤560px） ========== */
 
 @media (max-width: 560px) {
   h1 { font-size: 34px; }
