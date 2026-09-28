@@ -1,6 +1,7 @@
 'use strict';
 
 // 后台音乐管理脚本
+// 提供歌曲上传、列表展示、设为当前播放与删除等操作
 
 (() => {
   const { api, guard, bindNav, escapeHtml } = window.admin;
@@ -32,7 +33,7 @@
       activeBannerEl.innerHTML = `
         <div class="active-banner inactive">
           <span class="badge muted-badge">未激活</span>
-          <span class="meta">还没选歌。下方选一首设为当前播放，前台播放器就会播它。</span>
+          <span class="meta">尚未选择歌曲。在下方选一首设为当前播放，前台播放器即可播放。</span>
         </div>`;
       return;
     }

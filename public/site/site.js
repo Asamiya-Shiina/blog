@@ -1,8 +1,7 @@
 'use strict';
 
 (() => {
-  // —— 滚动揭示 ——
-  const targets = document.querySelectorAll('.reveal');
+  // 滚动揭示：为带有 .reveal 类名的元素添加 IntersectionObserver 动画
   if (!('IntersectionObserver' in window)) {
     targets.forEach(el => el.classList.add('is-visible'));
   } else {
@@ -17,10 +16,10 @@
     targets.forEach(el => io.observe(el));
   }
 
-  // —— 播放器：拖动 + 吸边 ——
+  // 播放器拖动与边缘吸附
   const player = document.getElementById('player');
   if (player) {
-    // 封面图不可被拖走：阻止原生图片拖拽（配合 img 的 draggable=false）
+    // 阻止原生图片拖拽（配合 img 上 draggable=false），避免封面图被拖出播放器
     player.addEventListener('dragstart', (e) => {
       if (e.target && e.target.tagName === 'IMG') e.preventDefault();
     });
@@ -74,7 +73,7 @@
       const rect = player.getBoundingClientRect();
       const distLeft = rect.left, distRight = vw - rect.right;
 
-      // 合并吸边逻辑：先按"离谁更近"决定左右，再按阈值贴边（避免两套分支冲突）
+      // 合并吸边逻辑：先按「离哪侧更近」决定方向，再按阈值贴边，避免两套分支互相冲突
       let targetLeft = (distLeft <= distRight) ? m : vw - pw - m;
       let targetTop  = vh - ph - m;
 
@@ -88,8 +87,8 @@
     player.addEventListener('mousedown', onDown);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-    // 手机端禁用拖动；触屏桌面（如 Surface / iPad 横屏）也允许拖动。
-    // 用 matchMedia 区分触屏设备，比 `innerWidth > 560` 更准确。
+    // 手机端禁用拖动；触屏桌面（如 Surface / iPad 横屏）允许拖动
+    // 使用 matchMedia 区分触屏设备，比根据 innerWidth 判断更准确
     const isCoarsePointer = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
     if (!isCoarsePointer) {
       player.addEventListener('touchstart', onDown, { passive: true });
@@ -116,7 +115,7 @@
     });
   }
 
-  // —— 顶部菜单 ——
+  // 顶部导航菜单
   const navToggle = document.getElementById('nav-toggle');
   const navMenu   = document.getElementById('nav-menu');
   if (navToggle && navMenu) {
@@ -140,15 +139,16 @@
     });
   }
 
-  // —— 音频控制 ——
+  // 音频播放控制
   const audio = document.getElementById('audio');
   const btn   = document.getElementById('player-btn');
   const fill  = document.querySelector('.player-progress-fill');
   const bar   = document.querySelector('.player-progress');
   const titleEl = document.querySelector('.player-title');
   if (audio && btn) {
-    // userWantsPlay：『用户是否在听』。自动暂停不会清零，只有手动暂停才清零，
-    // 从而站内跳转/回到前台时仍知道「用户想继续听」。
+    // userWantsPlay：「用户是否在听」
+    // 自动暂停（如失焦暂停）不会清零该标记，仅手动暂停会清零
+    // 这样在站内跳转或回到前台时仍能记住用户的播放意图
     let userWantsPlay = false;
     btn.addEventListener('click', () => {
       if (!audio.src) return;  // 没有选中歌曲时不响应
@@ -158,7 +158,7 @@
     audio.addEventListener('play', () => {
       btn.classList.add('is-playing');
       userWantsPlay = true;
-      setPausedFlag(false);           // 用户又开始听了，撤销「手动暂停过」
+      setPausedFlag(false);           // 用户又开始听，撤销「手动暂停过」标记
     });
     audio.addEventListener('pause', () => btn.classList.remove('is-playing'));
 
@@ -172,9 +172,12 @@
       }
     });
 
-    // —— 手动暂停记录（Cookie，3 天） ——
-    // 只记一件事：用户上次是否手动按过暂停。记录了 3 天，期间再次访问就不自动播放；
-    // 用户重新点播放后撤销，过期自然失效。不记录歌曲/进度。
+    // 手动暂停状态记录（Cookie，有效期 3 天）
+    // 仅记录一件事：用户上次是否手动按下过暂停
+    //   - 记录后 3 天内再次访问时不自动播放
+    //   - 用户重新点击播放后撤销标记
+    //   - 过期后自然失效，不主动清除
+    // 不记录歌曲、进度等其他信息
     const PAUSED_COOKIE = 'playerPaused';
     const PAUSED_MAX_AGE = 3 * 24 * 3600;   // 3 天
     function setPausedFlag(paused) {
@@ -191,7 +194,7 @@
         .split(';')
         .some(c => c.trim().startsWith(PAUSED_COOKIE + '='));
     }
-    // 进度条只读：禁止点击/拖动跳转
+    // 进度条仅作展示用，禁止点击或拖动跳转
     bar.addEventListener('click',     (e) => { e.preventDefault(); e.stopPropagation(); });
     bar.addEventListener('mousedown',  (e) => { e.preventDefault(); e.stopPropagation(); });
     bar.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); }, { passive: false });
@@ -235,27 +238,29 @@
       if (titleEl) titleEl.textContent = song.title || '未命名';
     }
 
-    // —— 自动播放 ——
-    // 浏览器默认拦截『有声自动播放』（需用户手势才能出声）。
-    // 策略：加载后先尝试一次；此后持续监听各种用户手势，一旦用户
-    // 有点击/按键等交互就立即开播，监听一直保持到真正响起来为止。
+    // 自动播放策略
+    // 浏览器默认拦截有声自动播放（需用户手势才能出声）
+    // 这里采取折中策略：
+    //   1. 加载完成后先尝试一次播放
+    //   2. 若被拦截则持续监听用户手势事件（pointerdown / touchstart / mousedown / keydown）
+    //   3. 一旦捕获用户交互立即开播，监听一直保持到真正响起来为止
     function tryAutoplay() {
       if (btn.disabled) return;                  // 尚未选择歌曲
       if (!audio.paused) return;                 // 已在播放
-      audio.play().catch(() => { /* 拦截则继续等手势 */ });
+      audio.play().catch(() => { /* 被拦截则继续等待用户手势 */ });
     }
 
     const GESTURES = ['pointerdown', 'touchstart', 'mousedown', 'keydown'];
     function onUserGesture(e) {
-      // 播放按钮自带播放/暂停切换逻辑，点它会与这里的全局手势重复触发
-      // （按下触发 play，松开又触发 pause）。忽略按钮上的事件，让它自管。
+      // 播放按钮自带播放 / 暂停切换逻辑，点按钮会与全局手势监听重复触发
+      // （按下触发 play，松开又触发 pause）。忽略按钮上的事件，由其自身处理
       if (btn.contains(e.target)) return;
-      // 用户上一页手动暂停过：不让随手点击又把音乐拉起来
+      // 用户上次手动暂停过：不因随意的其他点击而恢复播放
       if (!userWantsPlay) return;
       tryAutoplay();
     }
 
-    // 已开始播放后不再需要手势兜底，移除监听
+    // 已开始播放后移除手势监听
     audio.addEventListener('play', () => {
       GESTURES.forEach(evt => window.removeEventListener(evt, onUserGesture));
     }, { once: true });
@@ -263,24 +268,27 @@
       window.addEventListener(evt, onUserGesture, { passive: true })
     );
 
-    // 首次加载：决定是否自动开播——只在『上次手动暂停过』时保持暂停
+    // 首次加载：决定是否自动开播
+    // 仅当用户上次手动暂停过（标记在 3 天内）时保持暂停
     function resumeLastPlayback(song) {
-      if (!song) return false;          // 没有歌曲
-      return !hasPausedFlag();          // 上次手动暂停过则不开播（3 天内）
+      if (!song) return false;          // 没有选中歌曲
+      return !hasPausedFlag();          // 上次手动暂停过则不开播
     }
     loadActiveSong().then((song) => {
       applySong(song);
-      // 上次手动暂停过 → 不自动播；否则尝试自动开播（手势兜底）
+      // 上次手动暂停过 → 不自动播放；否则尝试自动开播（手势兜底）
       userWantsPlay = resumeLastPlayback(song);
       if (userWantsPlay) tryAutoplay();
     });
-    // —— 页面失焦自动暂停 / 回焦自动播放 ——
-    // 切走标签页或切到其他窗口时暂停，切回来接着播。
-    // 只用 autoPaused 标记分辨「因失焦而暂停」，避免用户手动暂停后也被莫名续播。
+
+    // 页面失焦自动暂停 / 回焦自动播放
+    // 切换标签页或切换到其他窗口时暂停，回到前台时继续播放
+    // 仅通过 autoPaused 标记区分「因失焦被自动暂停」与「用户主动暂停」，
+    // 避免用户手动暂停后被误恢复
     let autoPaused = false;
 
     function maybePauseTrack() {
-      // 用户没在听（从未播或手动暂停过）就不处理；只有确认用户在听才失焦暂停
+      // 用户未在听（从未播放或手动暂停过）则不处理；仅当确认用户在听时才失焦暂停
       if (btn.disabled || !userWantsPlay || audio.paused) return;
       audio.pause();
       autoPaused = true;                          // 仅真正暂停时才标记
@@ -293,22 +301,22 @@
       autoPaused = false;
     }
 
-    // 切标签页/最小化：document 可见性变化
+    // 标签页可见性变化（切换 / 最小化）
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') {
         maybePauseTrack();
       } else {
         maybeResumeTrack();
-        // 标签页回到前台时重新拉一次（管理员刚换歌能立即生效）
+        // 标签页回到前台时重新拉取一次（管理员切换歌曲后能立即生效）
         loadActiveSong().then(applySong);
       }
     });
-    // 切到其他应用窗口：浏览器失去窗口焦点
+    // 窗口失焦：浏览器失去窗口焦点（切换到其他应用）
     window.addEventListener('blur',  maybePauseTrack);
     window.addEventListener('focus', maybeResumeTrack);
   }
 
-  // —— 实时状态 ——
+  // 首页实时状态卡
   const statusSection = document.getElementById('status-section');
   const statusBody = document.getElementById('status-body');
   if (statusSection && statusBody) {

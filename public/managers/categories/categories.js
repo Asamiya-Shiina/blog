@@ -1,6 +1,7 @@
 'use strict';
 
 // 后台分类管理脚本
+// 提供分类列表的渲染、新建、重命名与删除
 
 (() => {
   const { api, escapeHtml } = window.admin;

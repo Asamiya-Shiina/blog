@@ -1,7 +1,7 @@
 'use strict';
 
-// 审计日志：关键操作（角色变更、密码修改、用户增删、SMTP 配置等）留痕
-// 用于事后追溯「谁在什么时候动了什么」
+// 审计日志模块
+// 记录关键操作（角色变更、密码修改、用户增删、SMTP 配置变更等），用于事后追溯
 
 const db = require('./db');
 
@@ -12,10 +12,10 @@ const insertStmt = db.prepare(
 /**
  * 写一条审计日志
  * @param {object} entry
- * @param {number|null} entry.actorId  操作人 user.id（系统/匿名时传 null）
+ * @param {number|null} entry.actorId  操作人 user.id（系统或匿名时传 null）
  * @param {number|null} [entry.targetId] 作用对象 user.id（可选）
  * @param {string}      entry.action  动作名，如 'user.create' / 'role.change' / 'password.change'
- * @param {object}      [entry.detail] 额外上下文（任意可 JSON 化对象）
+ * @param {object}      [entry.detail] 额外上下文（任意可 JSON 序列化的对象）
  */
 function log({ actorId = null, targetId = null, action, detail = null }) {
   try {
@@ -29,11 +29,11 @@ function log({ actorId = null, targetId = null, action, detail = null }) {
 
 module.exports = { log };
 
-// —— 保留策略 ——
-// 审计日志不能无界增长：站主活跃一年就能堆几万行，磁盘满 SQLite 直接罢工
-// 每 6 小时跑一次：
-//   1) 删 90 天以前的记录
-//   2) 总行数超过硬上限（10 万）时按时间删到只剩 8 万，留缓冲
+// 保留策略
+// 审计日志不能无界增长：活跃站点一年内即可积累数万行，磁盘占满会导致 SQLite 直接失效
+// 每 6 小时执行一次清理：
+//   1) 删除 90 天以前的记录
+//   2) 行数超过硬上限（10 万）时按时间顺序删除至仅剩 8 万，留出缓冲
 const RETAIN_DAYS = 90;
 const HARD_CAP = 100_000;
 const SOFT_CAP = 80_000;

@@ -1,16 +1,16 @@
 'use strict';
 
-// —— 文章页面视图模块 ——
+// 文章页面视图模块
 // 服务端渲染 HTML：文章列表、文章详情、搜索页、提示页
-// 所有用户输入通过 escapeHtml 转义，Markdown 通过 DOMPurify 消毒
+// 所有非 Markdown 的用户输入通过 escapeHtml 转义，Markdown 通过 DOMPurify 消毒
 
 const { marked } = require('marked');
 const DOMPurify = require('isomorphic-dompurify');
 
-// GFM（表格、任务列表等）+ 换行转 <br>
+// 启用 GFM（表格、任务列表等）+ 换行转 <br>
 marked.setOptions({ gfm: true, breaks: true });
 
-// HTML 实体转义：防止 XSS（用于非 Markdown 的用户输入，如标题、摘要）
+// HTML 实体转义：用于非 Markdown 的用户输入（如标题、摘要），防止 XSS
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, ch => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',

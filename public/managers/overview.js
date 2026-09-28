@@ -1,6 +1,7 @@
 'use strict';
 
-// 后台首页脚本：拉取已发布/草稿数量，并展示最近更新的文章
+// 后台首页脚本
+// 拉取已发布与草稿文章数量，并展示最近更新的若干篇文章
 
 (async () => {
   const { api } = window.admin;
@@ -27,7 +28,8 @@
         </div>
       `).join('');
     }
-    // 行可点跳转编辑器（不能用内联 onclick，违反 CSP style-src-attr / 内联事件限制）
+    // 列表项点击后跳转至编辑器
+    // 不能使用内联 onclick：受全站 CSP 的 `script-src 'self'` 限制，内联事件会被拦截
     wrap.addEventListener('click', (e) => {
       const row = e.target.closest('.row-item');
       if (row) window.location.href = '/managers/editor?id=' + row.dataset.id;

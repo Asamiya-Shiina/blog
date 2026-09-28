@@ -1,18 +1,18 @@
 'use strict';
 
-// —— 上传孤儿清理 ——
+// 上传孤儿清理
 //
 // 维护三类资源的「DB 引用集 与 磁盘文件集」一致：
 //   1. 头像孤儿：data/uploads/avatars/ 中未被 users.avatar_filename 引用的文件
 //   2. 音乐孤儿：data/uploads/music/   中未被 music.filename     引用的文件
-//   3. WAL 回收：周期性 PRAGMA wal_checkpoint(TRUNCATE)，把 -wal 写回主 DB 并截断
+//   3. WAL 回收：周期性 PRAGMA wal_checkpoint(TRUNCATE)，将 -wal 内容写回主数据库并截断
 //
-// 调度（与 src/audit.js:58-62 同模式）：
-//   - 模块加载即跑一次
+// 调度（与 src/audit.js:58-62 一致）：
+//   - 模块加载时立即执行一次
 //   - setInterval(24h) + .unref()
-//   - 任一失败 console.warn，不阻塞其他 sweep
+//   - 任一清理失败仅 console.warn，不影响后续 sweep
 //
-// 由 server.js require() 触发加载，无 CLI 入口。
+// 由 server.js require() 触发加载，无独立 CLI 入口。
 
 const path = require('node:path');
 const fs = require('node:fs');
@@ -30,7 +30,7 @@ function readdirSafe(dir) {
   return fs.readdirSync(dir);
 }
 
-// 在 dir 中找出「不在 referenced 集合里」的文件；跳过 .tmp 和隐藏文件
+// 从 dir 中找出未被 referenced 集合引用的文件；跳过 .tmp 与隐藏文件
 function diffOrphans(dir, referenced) {
   return readdirSafe(dir).filter(
     name => !name.startsWith('.') && !name.endsWith('.tmp') && !referenced.has(name)
@@ -51,7 +51,7 @@ function unlinkOrphans(dir, orphans) {
   return { removed, failed };
 }
 
-// —— 头像孤儿 ——
+// 头像孤儿清理
 function sweepOrphanAvatars() {
   try {
     const rows = db.prepare('SELECT avatar_filename FROM users WHERE avatar_filename IS NOT NULL').all();
@@ -65,7 +65,7 @@ function sweepOrphanAvatars() {
   }
 }
 
-// —— 音乐孤儿 ——
+// 音乐孤儿清理
 function sweepOrphanMusic() {
   try {
     const rows = db.prepare('SELECT filename FROM music').all();
@@ -79,14 +79,15 @@ function sweepOrphanMusic() {
   }
 }
 
-// —— WAL checkpoint ——
-// TRUNCATE 模式：把 wal 内容写回主 db 文件后截断 -wal；并把 -shm 标记为可清理。
-// 失败常见原因：其他进程持锁（不该出现，本项目单进程）/ 磁盘满。失败仅 warn。
+// WAL checkpoint
+// TRUNCATE 模式：将 wal 内容写回主数据库文件后截断 -wal，并把 -shm 标记为可清理
+// 常见失败原因：其他进程持锁（本项目为单进程，正常情况下不应出现）/ 磁盘已满
+// 失败仅 warn，不影响其他清理任务
 function walCheckpoint() {
   try {
     // better-sqlite3 pragma 返回 [busy, log_pages, checkpointed_pages]
     const result = db.pragma('wal_checkpoint(TRUNCATE)');
-    // pragma('wal_checkpoint(...)') 在 better-sqlite3 返回对象 { busy, log_pages, checkpointed_pages }
+    // pragma('wal_checkpoint(...)') 在 better-sqlite3 中实际返回 { busy, log_pages, checkpointed_pages }
     const r = Array.isArray(result) ? result[0] : result;
     if (r && (r.checkpointed_pages > 0 || r.busy)) {
       console.log(`[orphan-sweep] wal checkpoint: ${r.checkpointed_pages} 页已合并${r.busy ? '（busy）' : ''}`);
@@ -105,5 +106,5 @@ function runAll() {
 const timer = setInterval(runAll, SWEEP_INTERVAL_MS);
 timer.unref();
 
-// 启动后立即跑一次
+// 启动后立即执行一次
 runAll();

@@ -1,7 +1,7 @@
 'use strict';
 
-// —— 数据库初始化模块 ——
-// 使用 better-sqlite3（同步 SQLite 驱动），启动时自动建表和迁移
+// 数据库初始化模块
+// 基于 better-sqlite3（同步 SQLite 驱动），启动时自动建表并执行迁移
 
 const path = require('path');
 const fs = require('fs');
@@ -18,10 +18,10 @@ const db = new Database(DB_PATH);
 
 // WAL 模式：允许读写并发，提升多读者场景性能
 db.pragma('journal_mode = WAL');
-// 外键约束：确保数据完整性
+// 开启外键约束，确保数据完整性
 db.pragma('foreign_keys = ON');
 
-// —— 建表语句 ——
+// 建表语句
 db.exec(`
   -- 用户表：三档角色（admin 全局管理员 / moderator 普通管理员 / user 普通用户）
   CREATE TABLE IF NOT EXISTS users (
@@ -143,25 +143,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log(actor_id);
 `);
 
-// —— 数据库迁移 ——
+// 数据库迁移
 
 // 迁移 1：users 表添加 hash_version 列，区分密码哈希方案
 // 1 = bcrypt(明文)（旧方案）
-// 2 = bcrypt(sha256(明文))（当前方案，解决 bcrypt 72 字节限制）
+// 2 = bcrypt(sha256(明文))（当前方案，规避 bcrypt 72 字节输入限制）
 try {
   db.exec(`ALTER TABLE users ADD COLUMN hash_version INTEGER NOT NULL DEFAULT 1`);
 } catch (_) { /* 列已存在则忽略 */ }
 
 // 迁移 3：users 表添加 tokens_valid_after 列
-// 改密码 / 删用户时把这个值推到当前 epoch（秒），所有更早签发的 session token 立刻失效
-// 解决「token 是无状态 HMAC，丢失后即便改密码也仍然可用」的问题
+// 改密码 / 删用户时将该值更新为当前 epoch（秒），使所有更早签发的 session token 立即失效
+// 用于解决 session token 为无状态 HMAC、改密码后丢失的 token 仍可继续使用的问题
 try {
   db.exec(`ALTER TABLE users ADD COLUMN tokens_valid_after INTEGER NOT NULL DEFAULT 0`);
 } catch (_) { /* 列已存在则忽略 */ }
 
 // 迁移 2：users 表结构升级（开放注册 + 个人主页）
-// 旧表 role 仅允许 'admin'，且缺 email/status/verify/name/bio/avatar 列。
-// SQLite 改 CHECK 约束必须重建表，这里检测到缺 email 列即触发一次性重建。
+// 旧表 role 仅允许 'admin'，且缺少 email/status/verify/name/bio/avatar 列
+// SQLite 修改 CHECK 约束需重建表，检测到缺 email 列时执行一次性重建
 const userCols = db.pragma('table_info(users)').map(c => c.name);
 if (!userCols.includes('email')) {
   db.exec(`PRAGMA foreign_keys = OFF`);
@@ -193,19 +193,19 @@ if (!userCols.includes('email')) {
     `);
   })();
   db.exec(`PRAGMA foreign_keys = ON`);
-  // 注意：不要在这里调用 invalidateUserCount()——
-  // 该函数会访问 let 声明的 _userCountCache，而迁移代码位于其声明之前，
-  // 会在冷启动（旧库缺 email 列）时触发 TDZ: Cannot access before initialization。
-  // 此时缓存尚未被任何查询填充（本就为 null），invalidate 也是空操作，故直接省略。
+  // 注意：此处不要调用 invalidateUserCount()
+  // 该函数会引用下方 let 声明的 _userCountCache，而迁移代码位于其声明之前，
+  // 在冷启动（旧库缺 email 列）的路径上会触发 TDZ 异常。
+  // 此时缓存尚未被任何查询填充（其值本就为 null），invalidate 不会产生实际效果，故省略。
 }
 
-// 保证 email 索引存在（全新库或迁移后都成立）
+// 保证 email 索引存在（全新库或迁移后均成立）
 try {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
-} catch (_) { /* 列尚不存在则忽略，等迁移后再建 */ }
+} catch (_) { /* 列尚不存在则忽略，等迁移完成后再建 */ }
 
-// —— 初始化默认状态配置 ——
-// 首次运行时插入默认值，后续启动不会覆盖（INSERT OR IGNORE）
+// 初始化默认状态配置
+// 首次运行插入默认值，后续启动不覆盖（INSERT OR IGNORE）
 const defaultConfig = {
   // 黑名单：这些应用不会上报状态（密码管理器、系统工具等）
   blacklist: JSON.stringify(['1Password', 'KeePass', 'LastPass', 'Bitwarden', 'Windows Security', 'Task Manager', 'Registry Editor', 'cmd', 'powershell']),
@@ -225,8 +225,8 @@ for (const [key, value] of Object.entries(defaultConfig)) {
 }
 
 // 查询用户总数（用于首次引导判断）
-// 加 5s 内存缓存：站点判断「有没有管理员」是每请求都查的高频路径，
-// 不缓存的话 SELECT COUNT(*) 在百万行时会扫全表
+// 加入 5s 内存缓存：站点判断「是否存在管理员」是每请求都执行的高频路径
+// 不缓存时 SELECT COUNT(*) 在百万行规模下需要全表扫描
 let _userCountCache = null;
 let _userCountCachedAt = 0;
 const USER_COUNT_TTL_MS = 5000;
@@ -240,17 +240,17 @@ function userCount() {
   return _userCountCache;
 }
 
-// 任何写操作影响 users 表行数时必须调这个，否则 5 秒内 userCount() 会返回旧值
-// （首次引导场景下最多让「无管理员」状态多持续 5 秒，可接受）
+// 任何影响 users 表行数的写操作都必须调用本函数，否则 5 秒内 userCount() 将返回旧值
+// 首次引导场景下最多让「无管理员」状态多持续 5 秒，可接受
 function invalidateUserCount() { _userCountCache = null; _userCountCachedAt = 0; }
 
-// 清理 verify_expires 已过期的 pending 用户（注册后 15 分钟内未点验证链接）
-// 目的：释放被锁住的 username / email，让用户能立即重新注册
-// 返回被删除的记录 [{id, username, email}]，由调用方负责写审计日志
-// （db.js 不依赖 audit.js 以避免循环依赖）
+// 清理 verify_expires 已过期的 pending 用户（注册后 15 分钟内未完成邮箱验证）
+// 目的：释放被占用的 username / email，允许用户立即重新注册
+// 返回被删除的记录 [{id, username, email}]，由调用方负责写入审计日志
+// db.js 不依赖 audit.js，以避免循环依赖
 function sweepExpiredPendingUsers() {
-  // verify_expires 存的是 ISO 8601（'2026-09-24T15:55:05.694Z'），
-  // 字典序等价于时间序，JS 侧 new Date().toISOString() 同格式可直接比较
+  // verify_expires 以 ISO 8601 字符串存储（例：'2026-09-24T15:55:05.694Z'）
+  // 字典序与时间序等价，JS 端 new Date().toISOString() 生成的格式可直接比较
   const now = new Date().toISOString();
   const expired = db.prepare(
     "SELECT id, username, email FROM users WHERE status='pending' AND verify_expires IS NOT NULL AND verify_expires < ?"

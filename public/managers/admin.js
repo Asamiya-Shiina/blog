@@ -59,22 +59,22 @@
     try {
       const res = await fetch('/api/me', { credentials: 'same-origin' });
       if (res.status === 401) {
-        // 未登录：跳登录页（replace 防止回退回到原页）
+        // 未登录：跳登录页（使用 replace 防止通过浏览器后退回到原页）
         window.location.replace('/login/');
         return null;
       }
       if (!res.ok) throw new Error('auth check failed');
       return await res.json();
     } catch {
-      // 网络错误 / 5xx 也一律视为未登录
+      // 网络错误或 5xx 一律视为未登录
       window.location.replace('/login/');
       return null;
     }
   }
 
-  /** 退出登录：调 /api/logout 清 cookie，然后跳 /login/（即使失败也跳转） */
+  /** 退出登录：调用 /api/logout 清除 cookie，然后跳 /login/（接口失败也继续跳转） */
   async function logout() {
-    try { await api('POST', '/api/logout'); } catch {} // 忽略错误，目标都是回登录页
+    try { await api('POST', '/api/logout'); } catch {} // 忽略错误，最终都会回到登录页
     window.location.replace('/login/');
   }
 
@@ -94,10 +94,12 @@
   }
 
   /**
-   * HTML 实体转义，防止把后端返回的字符串直接插入 innerHTML 时产生 XSS
+  /**
+   * HTML 实体转义
    *
-   * 用于标题、用户名、应用名等非 Markdown 的纯文本字段。
-   * 文章正文走 marked + DOMPurify，不经过这里。
+   * 用于标题、用户名、应用名等非 Markdown 的纯文本字段，
+   * 防止将后端返回的字符串直接插入 innerHTML 时产生 XSS
+   * 文章正文使用 marked + DOMPurify 处理，不经过本函数
    */
   function escapeHtml(s) {
     return String(s || '').replace(/[&<>"']/g, ch => ({
@@ -106,11 +108,11 @@
   }
 
   /**
-   * 浏览器端 SHA-256：把明文密码先哈希再发送
+   * 浏览器端 SHA-256：将明文密码先哈希再发送到服务端
    *
-   * 服务端的 bcrypt(sha256(明文), 12) 方案要求客户端也先 SHA-256 一遍，
-   * 这样网络上传输的永远是 64 位十六进制哈希，避免明文泄露。
-   * 失败的 Promise 由调用方处理。
+   * 服务端采用 bcrypt(sha256(明文), 12) 方案，要求客户端先做一次 SHA-256
+   * 这样网络传输的始终是 64 位十六进制哈希，避免明文密码泄露
+   * 失败时返回 rejected Promise，由调用方决定如何处理
    */
   async function hashPassword(password) {
     const data = new TextEncoder().encode(password);
@@ -122,18 +124,18 @@
   window.admin = { api, guard, logout, bindNav, escapeHtml, hashPassword };
 
   /**
-   * DOM 就绪后自动执行一次 guard + bindNav：
-   *   - 已登录 → 顶栏显示用户名、绑定退出按钮
-   *   - 未登录 → guard() 内已跳走
+   * DOM 就绪后自动执行 guard + bindNav：
+   *   - 已登录：顶栏显示用户名并绑定退出按钮
+   *   - 未登录：guard() 内已跳转至登录页
    *
-   * 页面级脚本若需要"未登录时展示不同视图"（如 /managers/users 的首次引导），
-   * 可调用 guard() 拿到 user 后自行分支。
+   * 页面级脚本若需要在未登录时展示不同视图（例如 /managers/users 的首次引导），
+   * 可自行调用 guard() 并根据返回值分支处理。
    */
   document.addEventListener('DOMContentLoaded', async () => {
     const user = await guard();
     if (user) {
       bindNav(user);
-      // 顶栏导航统一注入"个人主页" / "SMTP"（仅管理员）入口
+      // 顶栏统一注入「个人主页」与「SMTP」（仅管理员）入口
       const nav = document.querySelector('.topbar nav');
       if (nav) {
         const view = nav.querySelector('a[href="/"]');

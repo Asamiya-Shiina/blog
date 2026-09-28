@@ -1,27 +1,27 @@
 'use strict';
 
-// 首页脚本：
+// 首页脚本
 // 1) 上报本次访问、拉取今日浏览人数
-// 2) 已登录时把"登录"按钮替换成用户头像
+// 2) 已登录时将「登录」按钮替换为用户头像
 
 (function () {
-  // 上报访问（失败静默）
+  // 上报本次访问（失败静默）
   fetch('/api/stats/view', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path: '/' })
   });
-  // 拉取今日人数
+  // 拉取今日浏览人数
   fetch('/api/stats/today')
     .then(function (r) { return r.json(); })
     .then(function (d) {
       var el = document.getElementById('view-count');
       if (el && typeof d.count === 'number') el.textContent = d.count;
     })
-    .catch(function () { /* 静默失败 */ });
+    .catch(function () { /* 静默忽略错误 */ });
 })();
 
-// 右上角：已登录则把"登录"按钮替换成用户头像
+// 右上角：已登录时将「登录」按钮替换为用户头像
 (function () {
   var loginBtn = document.getElementById('login-btn');
   var avatar = document.getElementById('user-avatar');
@@ -33,7 +33,7 @@
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (u) {
       if (!u) return;
-      // 全局管理员头像 → 后台；其他角色 → 个人主页
+      // 全局管理员头像跳转后台，其他角色跳个人主页
       avatar.href = u.role === 'admin' ? '/managers/' : '/me/';
       var initial = (u.username || '?').trim().charAt(0).toUpperCase();
       if (u.avatar_url) {

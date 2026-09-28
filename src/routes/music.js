@@ -1,11 +1,10 @@
 'use strict';
 
-// —— 音乐路由 ——
-// 列表、上传、删除、设置当前播放歌曲，一个不落
-// 主人点哪首歌，前台播放器就放哪首，主打一个听话
-// by ALyCE_Aoi
-// 公开接口：GET /api/music/active  （前台播放器调用）
+// 音乐路由
+// 提供列表、上传、删除与设置当前播放歌曲等接口
+// 公开接口：GET /api/music/active（前台播放器调用）
 // 管理接口：其余全部需要登录
+// ALyCE_Aoi
 
 const path = require('path');
 const fs = require('fs');
@@ -24,7 +23,7 @@ const MUSIC_DIR = path.join(__dirname, '..', '..', 'data', 'uploads', 'music');
 fs.mkdirSync(MUSIC_DIR, { recursive: true });
 
 // 允许的 MIME 类型与对应扩展名
-// 仅放行主流浏览器原生支持的格式，避免上传奇怪容器
+// 仅放行主流浏览器原生支持的格式，避免未知容器带来的兼容问题
 const ALLOWED_MIME = {
   'audio/mpeg':    '.mp3',
   'audio/mp3':     '.mp3',
@@ -40,7 +39,7 @@ const ALLOWED_MIME = {
   'audio/x-aac':   '.aac',
 };
 
-// 单文件大小上限：15MB，对一首完整歌曲绰绰有余
+// 单文件大小上限：15MB，对一首完整歌曲已足够
 const MAX_SIZE = 15 * 1024 * 1024;
 
 // 写操作限流：15 分钟最多 30 次
@@ -52,9 +51,9 @@ const writeLimiter = rateLimit({
   message: { error: 'too many requests, try again later' },
 });
 
-// 数据库行 → 歌曲对象
-// withOriginal=true 才带上 original_name（原始上传文件名，仅给管理员看）；
-// 公开接口不泄露该字段，避免把站主本地的原始文件名暴露给匿名访客。
+// 将数据库行映射为歌曲对象
+// 仅在 withOriginal=true 时携带 original_name（原始上传文件名，仅管理员可见）
+// 公开接口不暴露该字段，避免向匿名访客泄漏站主本地的原始文件名
 function rowToSong(row, withOriginal = false) {
   if (!row) return null;
   const song = {
@@ -90,12 +89,12 @@ router.get('/', requireManager, (_req, res) => {
 });
 
 // 上传歌曲（管理员）
-// Express req.body 是 Node Readable，与 Web Request.formData() 不直接兼容
-// 这里把 Node 流转成 Web ReadableStream 再构造一个 Request 调用原生 formData()
+// Express req 是 Node.js Readable 流，与 Web Request.formData() 不直接兼容
+// 此处将 Node 流转换为 Web ReadableStream 并包装为 Request，使用 undici 解析 multipart
 router.post('/', requireManager, writeLimiter, async (req, res) => {
   let form;
   try {
-    // 用 Node→Web 流转换 + Request 包装，让 undici 来解析 multipart
+    // Node → Web 流转换后通过 Request 包装，由 undici 负责 multipart 解析
     const webBody = Readable.toWeb(req);
     const headers = {};
     for (const [k, v] of Object.entries(req.headers)) {
@@ -124,12 +123,12 @@ router.post('/', requireManager, writeLimiter, async (req, res) => {
     return res.status(400).json({ error: `unsupported mime type: ${mime || '(unknown)'}` });
   }
 
-  // 读取字节并做最终大小校验
+  // 读取字节并执行最终大小校验
   const buf = Buffer.from(await file.arrayBuffer());
   if (buf.length === 0)           return res.status(400).json({ error: 'empty file' });
   if (buf.length > MAX_SIZE)      return res.status(413).json({ error: `file too large (max ${MAX_SIZE / 1024 / 1024}MB)` });
 
-  // 磁盘文件名：随机 UUID + 扩展名，避免用户控制路径
+  // 磁盘文件名采用 UUID + 扩展名的形式，防止用户控制路径
   const storedName = crypto.randomUUID() + ext;
   const fullPath = path.join(MUSIC_DIR, storedName);
 
@@ -140,7 +139,7 @@ router.post('/', requireManager, writeLimiter, async (req, res) => {
     return res.status(500).json({ error: 'failed to write file' });
   }
 
-  // 标题：用户可显式指定，否则用 original_name 去扩展名
+  // 标题：用户可显式指定；缺省时使用原始文件名去除扩展名
   let title = String(form.get('title') || '').trim().slice(0, 200);
   if (!title) {
     title = String(fileName).replace(/\.[^.]+$/, '').slice(0, 200) || '未命名';
@@ -154,7 +153,7 @@ router.post('/', requireManager, writeLimiter, async (req, res) => {
     `).run(storedName, String(fileName).slice(0, 255), title, mime, buf.length);
     row = db.prepare('SELECT * FROM music WHERE id = ?').get(info.lastInsertRowid);
   } catch (e) {
-    // DB 写入失败，回滚磁盘文件
+    // DB 写入失败时回滚磁盘文件
     fs.promises.unlink(fullPath).catch(() => {});
     console.error('music insert failed:', e);
     return res.status(500).json({ error: 'failed to save record' });
@@ -190,11 +189,12 @@ router.delete('/:id', requireManager, writeLimiter, (req, res) => {
   const row = db.prepare('SELECT * FROM music WHERE id = ?').get(id);
   if (!row) return res.status(204).end();
 
-  // 如果删除的是当前激活的，先清空设置（外键也会自动 SET NULL，但显式处理更清晰）
+  // 若删除的是当前激活的歌曲，先清空设置
+  // 外键 ON DELETE SET NULL 也会自动处理，这里显式执行以保持语义清晰
   db.prepare('UPDATE music_settings SET active_id = NULL WHERE id = 1 AND active_id = ?').run(id);
   db.prepare('DELETE FROM music WHERE id = ?').run(id);
 
-  // 异步删文件，失败也不影响 API 响应
+  // 异步删除文件，失败不影响 API 响应
   fs.promises.unlink(path.join(MUSIC_DIR, row.filename)).catch((e) => {
     console.warn('music file unlink failed:', row.filename, e.message);
   });

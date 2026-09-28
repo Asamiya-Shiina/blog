@@ -1,6 +1,7 @@
 'use strict';
 
 // 后台文章编辑器脚本
+// 提供文章的新建、编辑、预览、保存、发布与删除
 
 (() => {
   const { api, escapeHtml } = window.admin;

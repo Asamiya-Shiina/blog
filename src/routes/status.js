@@ -1,8 +1,11 @@
 'use strict';
 
-// —— 实时状态路由 ——
-// 桌面客户端上报当前活动状态、SSE 推送、管理配置
-// 分三层 API：客户端（需登录）、公开（无需登录）、管理（需管理员）
+// 实时状态路由
+// 提供桌面客户端上报当前活动状态、SSE 推送、管理配置等接口
+// API 分三层：客户端（需登录）、公开（无需登录）、管理（需管理员）
+// 客户端上报状态时，服务端会根据管理配置过滤掉不需要的应用与窗口标题
+// 公开接口仅返回活跃设备的公开信息，未登录访客拿到的 username 统一为 'anonymous'，避免枚举在线用户名
+// 管理接口可修改黑名单、映射等配置，客户端会在下一次上报时生效
 // by ALyCE_Aoi
 
 
@@ -15,7 +18,7 @@ const store = require('../status-store');
 
 const router = express.Router();
 
-// ============ 配置数据库操作 ============
+// 配置数据库操作
 
 // 读取单个配置项（JSON 反序列化）
 function getConfig(key) {
@@ -28,7 +31,7 @@ function setConfig(key, value) {
   db.prepare('INSERT OR REPLACE INTO status_config (key, value) VALUES (?, ?)').run(key, JSON.stringify(value));
 }
 
-// 读取所有配置，返回结构化对象（缺失的字段给默认空值）
+// 读取所有配置并返回结构化对象（缺失字段使用默认空值）
 function getAllConfig() {
   const rows = db.prepare('SELECT key, value FROM status_config').all();
   const config = {};
@@ -45,9 +48,9 @@ function getAllConfig() {
   };
 }
 
-// ============ 客户端 API（需要登录） ============
+// 客户端 API（需要登录）
 
-// 状态上报限流：15 秒内最多 30 次，防止客户端疯狂刷请求
+// 状态上报限流：15 秒内最多 30 次，防止客户端过度刷新
 const statusLimiter = rateLimit({
   windowMs: 15_000,
   max: 30,
@@ -65,7 +68,7 @@ const statusSchema = z.object({
 });
 
 // POST /api/data：客户端上报当前状态
-// deviceId = 用户名_设备名，用于区分同一用户的多台设备
+// deviceId = 用户名_设备名，用于区分同一用户的多个设备
 router.post('/', requireAuth, statusLimiter, (req, res) => {
   const parsed = statusSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -96,12 +99,12 @@ router.post('/off', requireAuth, statusLimiter, (req, res) => {
 });
 
 // GET /api/data/config：客户端拉取管理配置（黑名单、映射等）
-// 客户端根据这些配置决定哪些应用不上报、如何显示应用名
+// 客户端根据这些配置决定不上报哪些应用、如何展示应用名
 router.get('/config', requireAuth, (req, res) => {
   res.json(getAllConfig());
 });
 
-// ============ 公开 API（无需登录） ============
+// 公开 API（无需登录）
 
 // GET /api/data：获取当前所有活跃设备状态（公开信息）
 // 未登录访客拿到的 username 统一为 'anonymous'，避免枚举在线用户名
@@ -111,12 +114,12 @@ router.get('/', (req, res) => {
 
 // GET /api/data/stream：SSE 实时推送
 // 客户端建立长连接，服务端在状态变化时主动推送
-// 限制最大并发连接数防止资源耗尽
+// 通过限制最大并发连接数防止资源耗尽
 const MAX_SSE_CLIENTS = 50;
 
 router.get('/stream', (req, res) => {
   if (store.clientCount >= MAX_SSE_CLIENTS) {
-    // 告诉浏览器等 60s 再重试，避免 50 个连接满后所有客户端都疯狂重连
+    // 告诉浏览器等待 60s 后再重试，避免连接打满后所有客户端同时重连
     res.setHeader('Retry-After', '60');
     return res.status(429).json({ error: 'too many connections' });
   }
@@ -127,17 +130,17 @@ router.get('/stream', (req, res) => {
     'Connection': 'keep-alive',             // 保持长连接
     'X-Accel-Buffering': 'no',              // 禁用 Nginx 缓冲
   });
-  // 立即发送当前状态（已登录用户可看到 username，未登录访客拿到 anonymous）
+  // 立即发送当前状态（已登录用户可看到 username，未登录访客拿到 'anonymous'）
   res.write(`data: ${JSON.stringify(store.getPublicStatus(req.user || null))}\n\n`);
   // 注册为 SSE 客户端，后续状态变化会自动推送
   store.addClient(res);
-  // 每 30 秒发送心跳，防止连接被中间代理断开
+  // 每 30 秒发送一次心跳，防止连接被中间代理断开
   const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 30_000);
-  // 客户端断开时清理
+  // 客户端断开时清理心跳
   req.on('close', () => clearInterval(heartbeat));
 });
 
-// ============ 管理 API（需要登录 + 管理员权限） ============
+// 管理 API（需要管理员权限）
 
 // GET /api/data/admin/config：获取管理配置
 router.get('/admin/config', requireManager, (req, res) => {
@@ -145,7 +148,7 @@ router.get('/admin/config', requireManager, (req, res) => {
 });
 
 // POST /api/data/admin/config：保存管理配置
-// 部分更新：只修改提交的字段，未提交的保持不变
+// 部分更新：仅修改提交的字段，未提交的保持不变
 const configSchema = z.object({
   blacklist: z.array(z.string().max(100)).optional(),
   blacklistPatterns: z.array(z.string().max(200)).optional(),

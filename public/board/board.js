@@ -1,20 +1,21 @@
 'use strict';
 
-// 留言板脚本：渲染留言列表、嵌套回复、发布/删除/回复
+// 留言板前端脚本
+// 提供留言列表渲染、嵌套回复展示、发布、删除与回复等交互
 
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 function formatTime(t) {
   if (!t) return '';
-  // 服务端是北京时间（+8h），按字符串直接展示 yyyy-mm-dd hh:mm
+  // 服务端存储为北京时间（+8h）的字符串形式，直接按 yyyy-mm-dd hh:mm 格式展示
   return t.replace('T', ' ').slice(0, 16);
 }
 function roleTagClass(role) { return role === 'admin' ? 'admin' : role === 'moderator' ? 'moderator' : ''; }
 function roleTagLabel(role) { return role === 'admin' ? '管理员' : role === 'moderator' ? '版主' : ''; }
 
-let me = null;       // 当前登录用户
-let messages = [];   // 顶层留言 + 嵌套 replies
+let me = null;       // 当前登录用户对象（未登录时为 null）
+let messages = [];   // 顶层留言，每项包含嵌套的 replies 数组
 
 async function fetchMe() {
   try {
@@ -35,7 +36,7 @@ function renderMessage(m, isChild) {
   wrap.dataset.id = m.id;
 
   const tag = roleTagLabel(m.role) ? `<span class="role-tag ${roleTagClass(m.role)}">${roleTagLabel(m.role)}</span>` : '';
-  // 优先展示个人主页昵称，未设置时退回账号名
+  // 优先展示个人主页昵称，未设置时回退为账号名
   const displayName = m.name || m.username;
   const avatar = m.avatar_url
     ? `<img class="avatar" src="${escapeHtml(m.avatar_url)}" alt="" />`

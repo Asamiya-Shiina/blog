@@ -64,7 +64,7 @@
       // 采集拖动轨迹（captcha 坐标系，供后端校验这是一次真实拖拽而非脚本）
       const t = Date.now();
       const last = dragTrace[dragTrace.length - 1];
-      // 同一毫秒触发的连续 move 事件去重，保证服务端「时间严格递增」判定不误伤
+      // 同一毫秒触发的连续 move 事件需去重，确保服务端「时间严格递增」的判定不被误伤
       if (!last || t > last.t) dragTrace.push({ x: pos / scale, t });
     };
 

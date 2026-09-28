@@ -1,5 +1,5 @@
 """
-Blog 状态客户端 - Python 版（Windows）
+Blog 状态客户端（Windows，Python 版）
 
 功能：检测当前前台窗口与空闲时间，每 5 秒向 blog 服务器上报一次
 "正在使用什么应用"。前台 /status 页面通过 SSE 实时展示这些设备。
@@ -7,10 +7,10 @@ Blog 状态客户端 - Python 版（Windows）
 技术栈：requests + pystray + tkinter + Pillow + ctypes
 
 模块划分：
-  - get_foreground_window() / get_idle_seconds()  Windows API 封装
-  - HttpClient                              带 cookie 的 HTTP 客户端
-  - StatusClient                            核心上报逻辑
-  - StatusGUI / create_icon_image / pystray  GUI + 系统托盘
+  - get_foreground_window() / get_idle_seconds()    Windows API 封装
+  - HttpClient                                      带 cookie 的 HTTP 客户端
+  - StatusClient                                    核心上报逻辑
+  - StatusGUI / create_icon_image / pystray         GUI + 系统托盘
 
 入口：if __name__ == "__main__": StatusGUI().run()
 """
@@ -30,23 +30,23 @@ import requests
 import pystray
 from PIL import Image, ImageDraw
 
-# ============ 单实例检测 ============
-# 用 Windows 命名 Mutex 实现单实例：第二次启动会得到 ERROR_ALREADY_EXISTS (183)
+# 单实例检测
+# 通过 Windows 命名 Mutex 实现：第二次启动会得到 ERROR_ALREADY_EXISTS (183)
 # 避免同一台机器上重复运行客户端导致状态互相覆盖
 
 MUTEX_NAME = "BlogStatusClientMutex"
 mutex = ctypes.windll.kernel32.CreateMutexW(None, False, MUTEX_NAME)
 if ctypes.windll.kernel32.GetLastError() == 183:
-    # 已有实例：弹提示并退出，不重复创建托盘
+    # 已有实例在运行：弹窗提示后退出，避免重复创建托盘
     root = tk.Tk()
     root.withdraw()
     messagebox.showinfo("提示", "客户端已在运行中，请查看系统托盘。")
     root.destroy()
     sys.exit(0)
 
-# ============ Windows API ============
-# 用 ctypes 直接调 user32 / kernel32 的窗口/输入相关 API
-# 替代有外部依赖的 pywin32，减小打包体积
+# Windows API
+# 使用 ctypes 直接调用 user32 / kernel32 中与窗口、输入相关的 API
+# 取代依赖 pywin32 的方案，可减少打包体积
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -55,8 +55,8 @@ def get_foreground_window():
     """获取当前前台窗口的 (进程名, 窗口标题)，失败返回 None。
 
     实现路径：GetForegroundWindow → GetWindowTextW + GetWindowThreadProcessId
-    → QueryFullProcessImageNameW → 取 basename 去后缀。
-    进程名小写匹配留给上层做。
+    → QueryFullProcessImageNameW → 取 basename 去后缀
+    进程名小写匹配交给上层处理
     """
     hwnd = user32.GetForegroundWindow()
     if not hwnd:
@@ -85,13 +85,14 @@ def get_foreground_window():
     return {"process_name": process_name, "title": title}
 
 
-# 空闲判定阈值：5 分钟无键盘/鼠标输入视为"休息中"
+# 空闲判定阈值：5 分钟无键盘 / 鼠标输入视为「休息中」
 IDLE_THRESHOLD_SEC = 300
 
 def get_idle_seconds():
-    """返回距离"最后一次输入事件"的秒数，用于判断是否离开座位。
+    """返回距离「最后一次输入事件」的秒数，用于判断用户是否离开座位。
 
-    用 LASTINPUTINFO 结构 + GetLastInputInfo，比全局 keyboard hook 轻量。
+    使用 LASTINPUTINFO 结构 + GetLastInputInfo，
+    相比全局 keyboard hook 开销更小。
     """
     class LASTINPUTINFO(ctypes.Structure):
         _fields_ = [("cbSize", ctypes.wintypes.UINT), ("dwTime", ctypes.wintypes.DWORD)]
@@ -105,14 +106,14 @@ def get_idle_seconds():
     return 0
 
 
-# ============ HTTP 工具 ============
+# HTTP 工具
 
 class HttpClient:
     """带 cookie 持久化的 HTTP 客户端，封装 status 服务的全部 API 调用。
 
     - 复用 requests.Session：服务端签发的 sid cookie 自动携带
-    - 显式加 Referer / Origin：避免部分严格 CORS 配置报错
-    - 错误处理统一抛出 Exception，后由调用方提示用户
+    - 显式附加 Referer / Origin：避免部分严格 CORS 配置报错
+    - 所有错误统一抛出 Exception，由调用方负责提示用户
     """
 
     def __init__(self):
@@ -121,16 +122,16 @@ class HttpClient:
         self.session.headers.update({"User-Agent": "BlogStatusClient/1.0"})
 
     def request(self, method, path, data=None, as_form=False):
-        # 用户输入里常漏掉 scheme（"localhost:3000" 没有 http://），requests 会报
-        # "No connection adapters..."，这里兜底补 http://
+        # 用户输入常漏掉 scheme（"localhost:3000" 没有 http://），
+        # requests 会报 "No connection adapters..."，此处兜底补 http://
         base = self.server.rstrip("/")
         if base and not base.startswith(("http://", "https://")):
             base = "http://" + base
         url = base + path
-        # 显式带 Referer/Origin，迎合部分启用了严格同源校验的部署
+        # 显式附加 Referer / Origin，适配部分开启了严格同源校验的部署
         headers = {"Referer": base + "/", "Origin": base}
         try:
-            # 按是否传 body、以及是否用表单格式，选不同的编码方式发给 requests
+            # 根据是否传 body、是否表单格式选择不同的编码方式
             if as_form and data:
                 resp = self.session.request(method, url, data=data, headers=headers, timeout=10)
             elif data:
@@ -138,24 +139,25 @@ class HttpClient:
             else:
                 resp = self.session.request(method, url, headers=headers, timeout=10)
 
-            # 204 无内容：返回空 dict，调用方照常处理
+            # 204 无内容：返回空字典，调用方按正常结果处理
             if resp.status_code == 204:
                 return {}
             resp.raise_for_status()
             return resp.json() if resp.text else {}
         except requests.exceptions.HTTPError as e:
-            # HTTP 错误：优先解析服务端返回的 error 字段，取不到再退回状态码
+            # HTTP 错误：优先解析服务端返回的 error 字段，
+            # 解析失败时回退为状态码 + 响应内容
             try:
                 error_json = e.response.json()
                 raise Exception(error_json.get("error", f"HTTP {e.response.status_code}"))
             except (json.JSONDecodeError, AttributeError):
                 raise Exception(f"HTTP {e.response.status_code}: {e.response.text}")
         except Exception as e:
-            # 非 HTTP 异常（超时、网络不通等）原样抛出，由调用方统一提示
+            # 非 HTTP 异常（超时、网络不可达等）原样抛出，由调用方统一提示
             raise Exception(str(e))
 
 
-# ============ 主应用 ============
+# 主应用
 
 class StatusClient:
     """核心状态上报客户端
@@ -163,10 +165,10 @@ class StatusClient:
     职责：
       1. 登录 blog 服务（保存 sid cookie）
       2. 拉取服务端配置（黑名单、应用名映射、显示标题应用）
-      3. 每 5 秒根据前台窗口/空闲状态生成上报 payload 并去重发送
+      3. 每 5 秒根据前台窗口 / 空闲状态生成上报 payload 并去重发送
 
-    配置保存（记住的服务器+账号）落在 client_config.json，
-    与 PyInstaller 打包后的 exe 同目录，便于重启用。
+    配置文件（记住的服务器 + 账号）保存于 client_config.json，
+    路径与 PyInstaller 打包后的 exe 同目录，便于重启后复用。
     """
 
     def __init__(self):
@@ -204,8 +206,8 @@ class StatusClient:
         self.http.server = server.rstrip("/")
         pw_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
         self.http.request("POST", "/api/login", {"username": username, "password_hash": pw_hash})
-        # 状态客户端只允许全局管理员（role=admin）使用，
-        # 普通用户 / moderator 就算登录成功也拒掉，避免污染 sid 会话
+        # 状态客户端仅允许全局管理员（role=admin）使用
+        # 普通用户 / moderator 即使登录成功也会被拒绝，防止 sid 会话被污染
         me = self.http.request("GET", "/api/me")
         if me.get("role") != "admin":
             try:
@@ -222,12 +224,12 @@ class StatusClient:
         try:
             self.http.request("POST", "/api/data", data)
         except Exception as e:
-            # 上报失败不打断主循环，打印后继续；服务端 45 秒超时会自动判离线
+            # 上报失败不打断主循环：打印后继续，服务端 45 秒超时后会自然判为离线
             print(f"[status] report failed: {e}")
 
     def report_if_changed(self, body):
-        # 去重上报：只有当状态真变了、或距上次上报超过 30 秒时才真正发请求，
-        # 避免每 5 秒都一样的状态也反复写（省流量、也防止被服务端限流）
+        # 去重上报：仅在状态发生变化、或距上次上报超过 30 秒时才真正发请求
+        # 避免每 5 秒都推送相同状态，节省流量，同时防止被服务端限流
         key = json.dumps(body)
         now = time.time()
         if self.last_sent != key or (now - self.last_sent_time) >= 30:
@@ -289,14 +291,14 @@ class StatusClient:
         return self._custom_device_name or os.environ.get('COMPUTERNAME', 'unknown')
 
     def tick(self):
-        """单次状态采集：每 5 秒被 background_loop 调一次。
+        """单次状态采集：每 5 秒由 background_loop 调用一次。
 
         判定顺序：
-          1. 未登录/未启用 → 上报 active=false（保留最后一次状态让服务端超时清理）
-          2. 空闲 ≥ 5 分钟 → 上报 "休息中"
-          3. 当前窗口是自身（python / status_client）→ 不上报（避免循环检测）
-          4. 黑名单应用 → 上报 "休息一下"（仍 active=true，只是隐藏具体内容）
-          5. 正常应用 → 上报应用名，可选窗口标题
+          1. 未登录或未启用 → 上报 active=false（让服务端超时清理上一条状态）
+          2. 空闲时长 ≥ 5 分钟 → 上报「休息中」
+          3. 当前窗口是客户端自身（python / status_client）→ 不上报（避免自我检测）
+          4. 黑名单应用 → 上报「休息一下」（仍 active=true，仅隐藏具体内容）
+          5. 正常应用 → 上报应用名，可选附带窗口标题
         """
         if not self.logged_in or not self.enabled:
             self.report_if_changed({"active": False, "deviceName": self.get_device_name()})
@@ -327,10 +329,9 @@ class StatusClient:
             return
 
         app_name = self.resolve_app_name(win["process_name"])
+        # 资源管理器空闲时（标题为 Program Manager 或为空）映射为「桌面」
         if process_lower == "explorer" and (win["title"] == "Program Manager" or not win["title"].strip()):
             app_name = "桌面"
-        elif process_lower == "windowsterminal":
-            app_name = "消耗Token死命调试中...."
 
         show_title = self.should_show_title(win["process_name"])
         self.report_if_changed({
@@ -342,7 +343,7 @@ class StatusClient:
         })
 
     def background_loop(self):
-        """子线程主循环，每 5 秒调一次 tick。running=False 时退出。"""
+        """子线程主循环：每 5 秒调用一次 tick，running=False 时退出。"""
         while self.running:
             try:
                 self.tick()
@@ -351,8 +352,8 @@ class StatusClient:
             time.sleep(5)
 
 
-# ============ 系统托盘图标 ============
-# 64×64 RGBA 透明底圆形图标：根据客户端启用状态切换颜色（绿=启用，灰=禁用）
+# 系统托盘图标
+# 64×64 RGBA 透明底圆形图标：根据客户端启用状态切换颜色（绿 = 启用，灰 = 禁用）
 
 def create_icon_image(color="#22c55e"):
     image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
@@ -360,14 +361,14 @@ def create_icon_image(color="#22c55e"):
     return image
 
 
-# ============ GUI ============
+# GUI
 
 class StatusGUI:
     """tkinter GUI + pystray 系统托盘
 
-    视图：登录框 / 状态框 两个 frame，按需切换。
-    关闭按钮（WM_DELETE_WINDOW）= 最小化到托盘，不退出进程。
-    后台循环：StatusClient.background_loop 跑在子线程，UI 每 2 秒拉一次刷新。
+    视图：登录框 / 状态框 两个 frame，按需切换显示
+    窗口关闭按钮（WM_DELETE_WINDOW）触发最小化到托盘，不会直接退出进程
+    后台循环：StatusClient.background_loop 跑在子线程，UI 每 2 秒刷新一次
     """
     def __init__(self):
         self.client = StatusClient()
@@ -409,7 +410,7 @@ class StatusGUI:
         threading.Thread(target=self.tray_icon.run, daemon=True).start()
 
     def minimize_to_tray(self):
-        """点击窗口关闭按钮：最小化到托盘而非真正退出。"""
+        """窗口关闭按钮处理：最小化到托盘而非真正退出。"""
         if not self.tray_icon:
             self.create_tray_icon()
         self.root.withdraw()
@@ -434,7 +435,7 @@ class StatusGUI:
             self.tray_icon.icon = create_icon_image("#22c55e" if self.client.enabled else "#999999")
 
     def quit_app(self, icon=None, item=None):
-        """托盘右键"退出"：发 active=false 让服务端清理，停托盘，销毁窗口。"""
+        """托盘右键「退出」：发送 active=false 让服务端清理，停止托盘并销毁窗口。"""
         self.client.running = False
         if self.client.logged_in:
             try:
@@ -466,7 +467,8 @@ class StatusGUI:
         self.login_btn = ttk.Button(self.login_frame, text="登录", command=self.do_login)
         self.login_btn.pack(fill="x")
 
-        # 多行报错区：完整堆栈太长时单行 Label 会被截，用 Text 让用户能滚动/选中复制
+        # 多行报错区：完整堆栈较长时单行 Label 会被截断
+        # 使用 Text 控件以便用户滚动或选中复制
         self.login_error = tk.Text(self.login_frame, height=5, wrap="word",
                                    foreground="red", borderwidth=0,
                                    background=self.root.cget("bg"))

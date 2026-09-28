@@ -1,6 +1,7 @@
 'use strict';
 
-// 登录页脚本：登录表单 / 首次设置切换 / 雨滴涟漪 canvas 动画
+// 登录页脚本
+// 提供登录表单、首次设置切换、雨滴涟漪 canvas 动画等功能
 
 (() => {
   async function sha256(password) {
@@ -42,7 +43,7 @@
           body: JSON.stringify(password_hash ? { username, password_hash } : { username, password }),
         });
         if (res.status === 204) {
-          // 登录成功：管理员进后台，普通用户进个人主页
+          // 登录成功：管理员进入后台，其他用户进入个人主页
           try {
             const m = await (await fetch('/api/me', { credentials: 'same-origin' })).json();
             if (m.role === 'admin') window.location.href = '/managers/';
@@ -149,7 +150,7 @@
   })();
 })();
 
-// —— 雨滴涟漪动画 ——
+// 雨滴涟漪动画
 (() => {
   const canvas = document.getElementById('ripples');
   if (!canvas) return;

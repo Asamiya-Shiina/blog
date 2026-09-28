@@ -1,13 +1,17 @@
 'use strict';
 
-// —— 留言板路由 ——
-/*
- * GET  /api/messages         公开：嵌套列表（顶层 + replies）。管理员多回带 IP。
- * POST /api/messages         登录 + 限流：新建留言或回复。
- * DELETE /api/messages/:id   登录：作者本人或管理员可删。
- *
- * 属地由 geoip-lite 在服务端解析，前端不感知；IP 仅管理员可见。
- */
+// 留言板路由
+//
+// 接口说明：
+//   GET    /api/messages        公开：嵌套列表（顶层 + replies）。管理员响应额外携带 IP。
+//   POST   /api/messages        登录 + 限流：新建留言或回复。
+//   DELETE /api/messages/:id    登录：作者本人或管理员可删。
+//
+// 属地由 geoip-lite 在服务端解析，前端不感知；IP 仅管理员可见。
+// 留言内容禁止零宽字符与控制字符（除常见换行 / 制表外），防止混淆、绕过审核以及对前端渲染的注入攻击
+// 留言内容长度限制 2000 字符，防止刷屏与 SQLite 被塞爆
+// 留言写操作限流：15 分钟内最多 30 次，防止刷屏
+// by ALyCE_Aoi
 
 const express = require('express');
 const rateLimit = require('express-rate-limit');
@@ -18,7 +22,7 @@ const { getClientIp, formatLocation } = require('../ip');
 
 const router = express.Router();
 
-// 留言写限流：15 分钟 30 次，防刷屏
+// 留言写操作限流：15 分钟内最多 30 次，防止刷屏
 const writeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
@@ -26,9 +30,9 @@ const writeLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// —— 把数据库行整理成对外的留言对象 ——
-// isOwner 让前端直接知道能不能删，不用前端再比对 user_id
-// avatar_url 总是返回（头像本身就是公开资源）；ip 仅管理员能看到
+// 将数据库行映射为对外暴露的留言对象
+// is_owner 让前端直接判断是否可删除，无需再次比对 user_id
+// avatar_url 始终返回（头像本身是公开资源）；ip 仅管理员可见
 function shapeMessage(row, viewer) {
   const isAdmin = viewer && viewer.role === 'admin';
   return {
@@ -56,7 +60,7 @@ const SELECT_SQL = `
 
 // GET /api/messages：嵌套列表
 router.get('/', (req, res) => {
-  // 顶层按时间倒序（新→旧），回复按时间正序（旧→新，对话自然）
+  // 顶层留言按时间倒序（新→旧），回复按时间正序（旧→新，对话展示更自然）
   const rows = db.prepare(`
     ${SELECT_SQL}
     ORDER BY m.created_at DESC
@@ -81,8 +85,9 @@ router.get('/', (req, res) => {
   res.json({ messages: tops });
 });
 
-// 过滤零宽字符、控制字符（除常见换行/制表外），防止混淆内容、绕过审核、攻击显示
-// 覆盖：零宽空格/连字/不连字/连接符/从左/从右/双向控制符、BOM、ASCII 控制符 (除 \t\n)
+// 过滤零宽字符与控制字符（除常见换行 / 制表外）
+// 用于防止内容混淆、绕过审核以及对前端渲染的注入攻击
+// 覆盖范围：零宽空格、连字、不连字、连接符、左右向控制符、双向控制符、BOM、ASCII 控制字符
 const FORBIDDEN_CONTENT = /[\u200B-\u200F\u2028-\u202F\u205F-\u206F\uFEFF\u202A-\u202E\u2066-\u2069\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 
 // POST /api/messages：新建或回复
@@ -93,7 +98,7 @@ const createSchema = z.object({
 });
 
 router.post('/', requireAuth, writeLimiter, (req, res) => {
-  // 未上传头像的用户不能发留言（头像即身份标识）
+  // 未上传头像的用户不能发布留言（头像作为身份标识）
   if (!req.user.avatar_filename) {
     return res.status(403).json({ error: '请先在个人主页上传头像' });
   }
@@ -101,7 +106,7 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
   const parsed = createSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: 'invalid request', detail: parsed.error.issues });
 
-  // 回复目标必须存在且不能套娃（回复的回复也只挂顶层，避免无限嵌套）
+  // 回复目标必须存在；不允许无限嵌套（回复的回复也仅挂在顶层之下）
   if (parsed.data.parent_id) {
     const parent = db.prepare('SELECT id, parent_id FROM messages WHERE id = ?').get(parsed.data.parent_id);
     if (!parent) return res.status(404).json({ error: 'parent not found' });

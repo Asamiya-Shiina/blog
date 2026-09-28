@@ -1,6 +1,7 @@
 'use strict';
 
-// 首次设置页脚本：创建管理员账号
+// 首次设置页脚本
+// 创建站点首个管理员账号
 
 async function sha256(password) {
   const data = new TextEncoder().encode(password);

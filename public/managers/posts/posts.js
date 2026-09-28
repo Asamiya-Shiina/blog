@@ -1,6 +1,7 @@
 'use strict';
 
-// 后台文章列表脚本：分页、筛选、删除
+// 后台文章列表脚本
+// 提供分页、按状态 / 关键词 / 分类筛选、编辑与删除等操作
 
 (() => {
   const { api, escapeHtml } = window.admin;

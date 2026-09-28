@@ -1,8 +1,8 @@
 'use strict';
 
-// —— 文章路由 ——
-// 列表、单篇查询、新建、更新、删除、预览，一个不缺
-// 所有路由都要登录（requireManager）
+// 文章路由
+// 提供列表、单篇查询、新建、更新、删除、预览等接口
+// 所有路由均要求登录（requireManager）
 // by ALyCE_Aoi
 
 const express = require('express');
@@ -19,15 +19,15 @@ const router = express.Router();
 // 启用 GFM（GitHub Flavored Markdown）和换行转 <br>
 marked.setOptions({ gfm: true, breaks: true });
 
-// Markdown → HTML，经过 DOMPurify 消毒防止 XSS
+// 将 Markdown 渲染为 HTML，并通过 DOMPurify 消毒以防止 XSS
 function renderHtml(md) {
   const raw = marked.parse(md || '');
-  // 禁掉 style 属性：DOMPurify 默认保留内联样式，允许 CSS 注入（外带/涂改页面）。
-  // 全站 CSP 的 style-src-attr 'none' 已经兜底，显式禁用更保险。
+  // 禁止 style 属性：DOMPurify 默认保留内联样式，会允许 CSS 注入
+  // （外带请求或涂改页面外观）。全站 CSP 中 style-src-attr 'none' 已作兜底，此处显式禁用更稳妥
   return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true }, FORBID_ATTR: ['style'] });
 }
 
-// 生成 URL 友好的 slug：小写、连字符分隔、去除特殊字符
+// 生成 URL 友好的 slug：小写、连字符分隔、过滤特殊字符
 function slugify(input) {
   const base = String(input || '')
     .toLowerCase()
@@ -39,7 +39,7 @@ function slugify(input) {
   return base || 'post-' + Date.now();
 }
 
-// 确保 slug 唯一：如果已存在则追加数字后缀（如 my-post-2）
+// 确保 slug 唯一：若已存在则追加数字后缀（例如 my-post-2）
 function uniqueSlug(base, excludeId) {
   let slug = base;
   let n = 1;
@@ -54,15 +54,15 @@ function uniqueSlug(base, excludeId) {
   }
 }
 
-// 全部替换某文章的分类关联（传空数组即清空分类）
+// 整体替换某文章的分类关联（传入空数组可清空分类）
 function setPostCategories(postId, categoryIds) {
   db.prepare('DELETE FROM post_categories WHERE post_id = ?').run(postId);
   const ins = db.prepare('INSERT INTO post_categories (post_id, category_id) VALUES (?, ?)');
   for (const id of categoryIds || []) ins.run(postId, id);
 }
 
-// 一次拉回多条文章的分类映射：{ postId: [{id,name}, ...] }
-// 用 LEFT JOIN 一次查完，避免列表 N+1
+// 一次性查询多篇文章的分类映射：{ postId: [{id,name}, ...] }
+// 通过 LEFT JOIN 一次完成，避免列表接口的 N+1 查询
 function categoriesForPosts(postIds) {
   const ids = [...new Set(postIds.filter(Number.isInteger))];
   if (ids.length === 0) return new Map();
@@ -81,8 +81,8 @@ function categoriesForPosts(postIds) {
   return map;
 }
 
-// 数据库行 → 文章对象
-// withHtml=true 时额外渲染 content_html（用于编辑器预览）
+// 将数据库行映射为文章对象
+// withHtml=true 时额外渲染 content_html（供编辑器预览使用）
 function rowToPost(row, { withHtml = false } = {}) {
   if (!row) return null;
   const post = {
@@ -100,9 +100,9 @@ function rowToPost(row, { withHtml = false } = {}) {
   return post;
 }
 
-// —— Zod 校验 Schema ——
+// Zod 校验 Schema
 
-// 新建文章：标题和内容必填
+// 新建文章：标题与内容必填
 const postSchema = z.object({
   title: z.string().min(1).max(200),
   slug: z.string().min(1).max(120).optional(),
@@ -112,11 +112,11 @@ const postSchema = z.object({
   category_ids: z.array(z.number().int().positive()).optional(),
 });
 
-// 更新文章：所有字段可选（partial）
+// 更新文章：所有字段均可选（partial）
 const patchSchema = postSchema.partial();
 
-// —— 列表查询 ——
-// GET /api/posts：分页查询文章，支持按状态和关键词筛选
+// 列表查询
+// GET /api/posts：分页查询文章，支持按状态与关键词筛选
 router.get('/', requireManager, (req, res) => {
   const status = typeof req.query.status === 'string' ? req.query.status : null;
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
@@ -124,7 +124,7 @@ router.get('/', requireManager, (req, res) => {
   const page = Math.max(1, parseInt(req.query.page || '1', 10) || 1);
   const pageSize = 20;
 
-  // 动态构建 WHERE 子句（参数化，防 SQL 注入）
+  // 动态构建 WHERE 子句（参数化，防止 SQL 注入）
   const where = [];
   const params = [];
   if (status === 'draft' || status === 'published') {
@@ -137,13 +137,13 @@ router.get('/', requireManager, (req, res) => {
   }
   if (q) {
     where.push('(title LIKE ? OR excerpt LIKE ? OR content_md LIKE ?)');
-    // 转义 LIKE 通配符（\、%、_），与公共搜索保持一致
+    // 转义 LIKE 通配符（\、%、_），与公共搜索实现保持一致
     const like = '%' + q.replace(/[\\%_]/g, ch => '\\' + ch) + '%';
     params.push(like, like, like);
   }
   const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
-  // 查询总数和分页数据
+  // 查询总数与分页数据
   const total = db.prepare(`SELECT COUNT(*) AS n FROM posts ${whereSql}`).get(...params).n;
   const rows = db.prepare(`
     SELECT id, slug, title, excerpt, status, created_at, updated_at
@@ -153,7 +153,7 @@ router.get('/', requireManager, (req, res) => {
     LIMIT ? OFFSET ?
   `).all(...params, pageSize, (page - 1) * pageSize);
 
-  // 一次拉回本页所有文章的分类，按 post_id 聚合成映射
+  // 一次性查询本页所有文章的分类，按 post_id 聚合成映射
   const catMap = categoriesForPosts(rows.map(r => r.id));
 
   res.json({
@@ -171,8 +171,8 @@ router.get('/', requireManager, (req, res) => {
   });
 });
 
-// —— Markdown 预览 ——
-// POST /api/posts/preview：渲染 Markdown 为 HTML，不保存
+// Markdown 预览
+// POST /api/posts/preview：渲染 Markdown 为 HTML，不持久化
 const previewSchema = z.object({ content_md: z.string().max(200_000) });
 router.post('/preview', requireManager, (req, res) => {
   const parsed = previewSchema.safeParse(req.body);
@@ -180,7 +180,7 @@ router.post('/preview', requireManager, (req, res) => {
   res.json({ content_html: renderHtml(parsed.data.content_md) });
 });
 
-// —— 查询单篇 ——
+// 查询单篇
 // GET /api/posts/:id：返回文章详情（含渲染后的 HTML）
 router.get('/:id', requireManager, (req, res) => {
   const id = parseInt(req.params.id, 10);
@@ -190,7 +190,7 @@ router.get('/:id', requireManager, (req, res) => {
   res.json(rowToPost(row, { withHtml: true }));
 });
 
-// —— 新建文章 ——
+// 新建文章
 // POST /api/posts：创建新文章，默认状态为 draft
 router.post('/', requireManager, (req, res) => {
   const parsed = postSchema.safeParse(req.body);
@@ -207,15 +207,15 @@ router.post('/', requireManager, (req, res) => {
     VALUES (?, ?, ?, ?, ?)
   `).run(finalSlug, title, excerpt || null, content_md, status || 'draft');
 
-  // 挂分类关联
+  // 写入分类关联
   setPostCategories(info.lastInsertRowid, category_ids);
 
   const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(info.lastInsertRowid);
   res.status(201).json(rowToPost(row, { withHtml: true }));
 });
 
-// —— 更新文章 ——
-// PUT /api/posts/:id：部分更新，只修改提交的字段
+// 更新文章
+// PUT /api/posts/:id：部分更新，仅修改提交的字段
 router.put('/:id', requireManager, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'invalid id' });
@@ -228,7 +228,7 @@ router.put('/:id', requireManager, (req, res) => {
   }
   const patch = parsed.data;
 
-  // 合并：提交的字段覆盖原值，未提交的保持不变
+  // 合并字段：提交的字段覆盖原值，未提交的保持不变
   const next = {
     title: patch.title ?? existing.title,
     excerpt: patch.excerpt !== undefined ? patch.excerpt : existing.excerpt,
@@ -239,7 +239,7 @@ router.put('/:id', requireManager, (req, res) => {
   if (patch.slug !== undefined) {
     nextSlug = slugify(patch.slug);
     if (!nextSlug) return res.status(400).json({ error: 'invalid slug' });
-    // slug 变更时检查唯一性
+    // slug 发生变化时检查唯一性
     if (nextSlug !== existing.slug) nextSlug = uniqueSlug(nextSlug, id);
   }
 
@@ -249,14 +249,14 @@ router.put('/:id', requireManager, (req, res) => {
     WHERE id = ?
   `).run(next.title, nextSlug, next.excerpt, next.content_md, next.status, id);
 
-  // 分类：提交了 category_ids 才替换，未提交则保持原状
+  // 分类：提交了 category_ids 才进行替换，未提交则保持原状
   if (patch.category_ids !== undefined) setPostCategories(id, patch.category_ids);
 
   const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(id);
   res.json(rowToPost(row, { withHtml: true }));
 });
 
-// —— 删除文章 ——
+// 删除文章
 // DELETE /api/posts/:id
 router.delete('/:id', requireManager, (req, res) => {
   const id = parseInt(req.params.id, 10);

@@ -1,6 +1,7 @@
 'use strict';
 
-// 后台状态管理脚本：实时状态展示 + 黑名单/映射等配置
+// 后台状态管理脚本
+// 提供实时状态展示、黑名单 / 应用名映射等配置的加载与保存
 
 (async () => {
   const { api, escapeHtml, bindNav } = window.admin;
@@ -14,6 +15,7 @@
     const el = document.getElementById('notice');
     el.textContent = msg;
     el.className = 'notice is-visible ' + type;
+    // 3 秒后自动隐藏提示
     setTimeout(() => el.classList.remove('is-visible'), 3000);
   }
 

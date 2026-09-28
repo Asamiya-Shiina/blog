@@ -1,6 +1,7 @@
 'use strict';
 
 // 后台 SMTP 配置脚本
+// 提供 SMTP 邮件服务配置的查看与更新
 
 (async function () {
   const { api, guard, bindNav } = window.admin;

@@ -12,29 +12,29 @@
  */
 
 (() => {
-  // 从共用工具库解构
+  // 从共用工具库 window.admin 解构所需函数
   const { api, guard, escapeHtml, bindNav, hashPassword } = window.admin;
 
-  // 两个视图区块：setup 表单 / 管理表格
+  // 两个视图区块：setup 引导表单与管理表格
   const setupView = document.getElementById('setup-view');
   const manageView = document.getElementById('manage-view');
 
-  // 角色中文名
+  // 角色中文标签
   const ROLE_LABEL = { admin: '全局管理员', moderator: '普通管理员', user: '普通用户' };
 
   /**
    * 页面初始化：
-   *   1. 先调 guard() 试登录态
-   *   2. 已登录 → 显示管理视图、加载用户列表
+   *   1. 调用 guard() 检测登录状态
+   *   2. 已登录 → 显示管理视图并加载用户列表
    *   3. 未登录且 needsSetup → 显示 setup 表单
-   *   4. 其他情况 → 跳登录页
+   *   4. 其他情况（管理员存在但当前未登录）→ 跳转登录页
    */
   async function init() {
     const user = await guard();
     if (user) {
       bindNav(user);
       if (user.role !== 'admin') {
-        // 非管理员：不能新建用户
+        // 非管理员不能创建用户：隐藏「新建」按钮
         document.getElementById('create-toggle').hidden = true;
       }
       manageView.hidden = false;
@@ -42,7 +42,7 @@
       return;
     }
 
-    // 未登录：检查是否处于"无管理员可登录"状态，需要 setup
+    // 未登录：检查是否处于「无管理员可登录」状态，需要 setup
     try {
       const s = await api('GET', '/api/setup-status');
       if (s.needsSetup) {
@@ -51,14 +51,14 @@
         return;
       }
     } catch {}
-    // 其他情况（数据库存在管理员但当前未登录）：跳登录页
+    // 其他情况（数据库中存在管理员但当前未登录）：跳转登录页
     window.location.replace('/login/');
   }
 
   /**
    * 绑定首次引导表单提交：
    *   POST /api/setup { username, password }
-   *   成功后服务端写 cookie 并 201，返回后浏览器跳后台首页
+   *   成功由服务端写入 cookie 并返回 201，随后浏览器跳转后台首页
    */
   function bindSetupForm() {
     const form = document.getElementById('setup-form');
@@ -172,7 +172,7 @@
       }
 
     } else if (btn.dataset.act === 'reset') {
-      // 重置密码：自己需旧密码（服务端强校验），别人无需旧密码
+      // 重置密码：修改自己需提供旧密码（服务端强制校验），修改他人无需旧密码
       const isSelf = String(id) === String(currentUser.id);
       let body;
       if (isSelf) {
@@ -181,7 +181,7 @@
         const np = prompt('请输入新密码（至少 8 位）');
         if (!np) return;
         if (np.length < 8) { alert('密码至少 8 位'); return; }
-        // 同时传明文和 SHA-256，服务端优先用 hash
+        // 同时传递明文与 SHA-256，服务端优先使用 hash
         body = {
           old_password: op,
           old_password_hash: await hashPassword(op),
@@ -203,7 +203,7 @@
     }
   }
 
-  // —— 新建用户面板（仅 admin 可见）——
+  // 新建用户面板（仅管理员可见）
   const createCard = document.getElementById('create-card');
   document.getElementById('create-toggle').addEventListener('click', () => {
     createCard.hidden = false;
@@ -229,7 +229,7 @@
       });
       form.reset();
       createCard.hidden = true;
-      // 重新拉当前用户（虽然不会变）以刷新列表
+      // 重新拉取当前用户（通常不会变化）以刷新列表
       const u = await guard();
       if (u) loadUsers(u);
     } catch (e2) {

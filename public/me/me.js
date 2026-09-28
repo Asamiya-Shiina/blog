@@ -1,6 +1,7 @@
 'use strict';
 
-// 个人主页脚本：拉取 /api/me、显示资料、修改名字/签名、上传头像、退出
+// 个人主页脚本
+// 拉取 /api/me、显示个人资料、修改名字与签名、上传头像、退出登录
 
 (async function () {
   const $ = (id) => document.getElementById(id);
@@ -14,7 +15,7 @@
     return data;
   };
 
-  // 登录守卫
+  // 登录守卫：未登录时跳转至登录页
   let me = null;
   try {
     const r = await fetch('/api/me', { credentials: 'same-origin' });
@@ -45,7 +46,7 @@
     window.location.replace('/login/');
   });
 
-  // 保存名字/签名
+  // 保存名字与签名
   $('btn-save').addEventListener('click', async () => {
     const msg = $('save-msg');
     msg.className = 'msg';

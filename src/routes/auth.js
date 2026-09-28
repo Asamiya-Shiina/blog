@@ -1,7 +1,16 @@
 'use strict';
 
-// —— 认证路由 ——
-// 首次引导、登录、退出、用户管理、密码修改都住这里
+// 认证路由
+// 包含首次引导、登录、退出、用户管理、密码修改等接口
+// 首次引导：
+//   GET  /api/setup-status  公开：返回是否需要初始化（无管理员账号时为 true）
+//   POST /api/setup         公开 + 限流：创建首个管理员账号（仅在无用户时可调用）
+// 开放注册：
+//   GET  /api/captcha       公开 + 限流：生成滑块验证数据
+//   POST /api/register      公开 + 限流：注册新用户（需滑块验证）
+// 登录 / 退出：
+//   POST /api/login         公开 + 限流：登录，返回 session cookie
+//   POST /api/logout        登录：清除 session cookie
 // by ALyCE_Aoi
 
 const path = require('node:path');
@@ -38,20 +47,21 @@ const {
 
 const router = express.Router();
 
-// 头像目录与限制（与 server.js 的 /avatar 静态挂载保持一致）
+// 头像目录与限制（与 server.js 中 /avatar 的静态挂载保持一致）
 const AVATAR_DIR = path.join(__dirname, '..', '..', 'data', 'uploads', 'avatars');
 fs.mkdirSync(AVATAR_DIR, { recursive: true });
-// 头像只允许 JPG（站点规范），其余格式直接拒绝
+// 头像仅接受 JPG（站点规范），其他格式直接拒绝
 const AVATAR_MIME = { 'image/jpeg': '.jpg' };
-const AVATAR_MAX = 200 * 1024; // 头像上限 200KB
+const AVATAR_MAX = 200 * 1024; // 头像大小上限 200KB
 
-// 校验图片文件头几个字节（magic number）是否与声称的 MIME 一致。
-// 客户端可以随意改 Content-Type，但 buffer 前几字节由文件本身决定，
-// 改不动。所以即使攻击者声明 image/png，提交的是 HTML/SVG/可执行文件也会被拒。
-// PNG: 89 50 4E 47 0D 0A 1A 0A
-// JPEG: FF D8 FF
-// GIF: 47 49 46 38 (37|39) 61
-// WEBP: 52 49 46 46 ?? ?? ?? ?? 57 45 42 50
+// 校验图片文件头部的 magic number 是否与声称的 MIME 类型一致
+// 客户端可随意修改 Content-Type，但文件 buffer 的起始字节由文件内容决定，无法伪造
+// 因此即使攻击者声明 image/png 而提交 HTML / SVG / 可执行文件，仍会被拒绝
+// 识别规则：
+//   PNG:  89 50 4E 47 0D 0A 1A 0A
+//   JPEG: FF D8 FF
+//   GIF:  47 49 46 38 (37|39) 61
+//   WEBP: 52 49 46 46 ?? ?? ?? ?? 57 45 42 50
 function checkImageMagic(mime, buf) {
   if (mime === 'image/png') {
     return buf.length >= 8 &&
@@ -72,7 +82,7 @@ function checkImageMagic(mime, buf) {
   return false;
 }
 
-// —— 速率限制器 ——
+// 速率限制器
 
 // 登录限流：15 分钟内最多 5 次，防暴力破解
 const loginLimiter = rateLimit({
@@ -101,9 +111,9 @@ const writeLimiter = rateLimit({
   message: { error: 'too many requests, try again later' },
 });
 
-// 按邮箱限流：每个邮箱 1 小时内最多 5 次注册尝试，防抢注/骚扰
-// key 用 body.email（小写）；缺失时退到 IP，避免无 body 请求共用一个桶
-// 注：跟 writeLimiter（按 IP）正交，一个限恶意 IP，一个限被抢注的邮箱
+// 按邮箱限流：每个邮箱 1 小时内最多 5 次注册尝试，防抢注和骚扰
+// key 使用 body.email（小写）；缺失时回退到 IP，避免无 body 请求共用一个桶
+// 与 writeLimiter（按 IP 限流）正交：前者限制恶意 IP，后者限制被抢注邮箱
 const emailRegisterLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
@@ -115,9 +125,9 @@ const emailRegisterLimiter = rateLimit({
   message: { error: 'this email has too many registration attempts, try again later' },
 });
 
-// captcha 限流：每 IP 每分钟最多 30 次，防 captcha 内存被打满
-// MAX_ITEMS=2000 是内存硬上限，但攻击者可以快速把 token 塞满后再不断 GET
-// 拿一堆没用完的 token；这个限流就是给这道闸门
+// captcha 限流：每 IP 每分钟最多 30 次，防止 captcha 内存被打满
+// MAX_ITEMS=2000 为内存硬上限，但攻击者可不断 GET 拿走未消费 token 占据名额
+// 此处限流即为该攻击面增加一道闸门
 const captchaLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
@@ -126,13 +136,13 @@ const captchaLimiter = rateLimit({
   message: { error: 'too many captcha requests, try again later' },
 });
 
-// —— 输入校验 Schema（Zod） ——
+// 输入校验 Schema（Zod）
 
-// 用户名：1-64 字符，只允许字母数字下划线连字符
+// 用户名：1-64 字符，仅允许字母、数字、下划线与连字符
 const usernameSchema = z.string().min(1).max(64).regex(/^[a-zA-Z0-9_-]+$/, 'invalid username');
 
-// 常见弱密码黑名单（取最常被撞库的前 50 条；服务端的「最终防线」作用有限，
-// 但挡掉「123456」「qwerty」这种最常被扫的字典项还是值得）
+// 常见弱密码黑名单（取最常被撞库的前 50 条）
+// 服务端的「最终防线」作用有限，但拦截「123456」「qwerty」这类高频弱密码仍有价值
 const COMMON_PASSWORDS = new Set([
   '12345678', '123456789', '1234567890', '1234567', '12345', '11111111',
   '00000000', 'password', 'password1', 'password123', 'qwerty', 'qwerty123',
@@ -182,14 +192,14 @@ const registerSchema = z.object({
   captcha_track: z.array(z.object({ x: z.number().finite(), t: z.number().finite() })).optional(),
 }).refine(d => d.password || d.password_hash, { message: 'password required' });
 
-// 占位哈希：用户不存在时用这个做 bcrypt 比较
-// 目的：让"用户不存在"和"密码错误"的响应时间一致，防止用户名枚举
+// 占位哈希：用户不存在时使用该哈希进行 bcrypt 比较
+// 用途：使「用户不存在」与「密码错误」的响应时间一致，避免用户名枚举
 const PLACEHOLDER_HASH = '$2b$12$..............................................................................';
 
-// —— 首次引导 ——
+// 首次引导
 
 // GET /api/setup-status：返回是否需要初始化（无管理员账号时为 true）
-// 未认证即可访问，供前端决定显示登录页还是设置页
+// 可在未登录状态下访问，供前端决定显示登录页还是设置页
 router.get('/setup-status', (_req, res) => {
   res.json({ needsSetup: db.userCount() === 0 });
 });
@@ -204,7 +214,7 @@ router.post('/setup', setupLimiter, async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid request' });
   }
-  // 优先使用 password_hash（前端已 SHA-256），否则用 password（明文）
+  // 优先使用 password_hash（前端已 SHA-256），否则使用 password（明文）
   const pw = parsed.data.password_hash || parsed.data.password;
   const preHashed = !!parsed.data.password_hash;
   const pwErr = validatePassword(pw);
@@ -215,28 +225,28 @@ router.post('/setup', setupLimiter, async (req, res) => {
   res.status(201).json({ id: user.id, username: user.username, role: user.role });
 });
 
-// —— 开放注册 ——
+// 开放注册
 
-// GET /api/captcha：生成滑块验证数据（public）
-// 返回 { token, targetX, width, sliderWidth }，前端据此画缺口并校验拖拽
-// token 内部绑定当前请求 IP，verify 必须同一 IP 提交，防跨机器刷
+// GET /api/captcha：生成滑块验证数据（公开）
+// 返回 { token, targetX, width, sliderWidth }，前端据此绘制缺口并校验拖拽
+// token 内部绑定当前请求 IP，verify 时必须在同一 IP 提交，防止跨设备盗用
 router.get('/captcha', captchaLimiter, (req, res) => {
   captcha.sweep();
   res.json(captcha.create(req));
 });
 
-// POST /api/register：公开注册，新用户默认为普通用户（user）
-// 流程：滑块验证 → Zod 校验 → 查 SMTP 是否已配置
-//   - 已配置 SMTP：创建 pending 用户，发验证邮件，needsVerify=true
+// POST /api/register：开放注册，新用户默认为普通用户（user）
+// 处理流程：滑块验证 → Zod 校验 → SMTP 配置检查
+//   - 已配置 SMTP：创建 pending 用户并发送验证邮件，needsVerify=true
 //   - 未配置 SMTP：创建 active 用户，needsVerify=false（跳过邮箱验证）
 router.post('/register', writeLimiter, emailRegisterLimiter, async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid request' });
   const { username, password, password_hash, email, captcha_token, captcha_x, captcha_track } = parsed.data;
 
-  // 站点已初始化才开放注册；首个账户仍走 /setup
+  // 仅在站点完成初始化后才开放注册；首个账号仍走 /setup
   if (db.userCount() === 0) return res.status(409).json({ error: 'setup required' });
-  // 邮箱域名白名单：拒绝一次性/匿名/企业/学校邮箱，只放行主流个人邮箱
+  // 邮箱域名白名单：拒绝一次性、匿名、企业及学校邮箱，仅放行主流个人邮箱
   if (!emailPolicy.isDomainAllowed(email)) {
     return res.status(400).json({ error: '请使用主流个人邮箱（Gmail / QQ / Outlook / 163 等）' });
   }
@@ -247,13 +257,14 @@ router.post('/register', writeLimiter, emailRegisterLimiter, async (req, res) =>
   const pwErr = validatePassword(pw);
   if (pwErr) return res.status(400).json({ error: pwErr });
 
-  // 先分别查 username / email 是否被占用，再决定返回，统一 409 消息。
-  // 如果直接 INSERT 让 UNIQUE 约束抛异常再捕获，异常时机因命中列不同而不同，
-  // 攻击者可以通过响应时间差分辨出「username 已存在」还是「email 已存在」。
-  // 先 sweep 一次：把过期的 pending 用户立刻清掉，避免「填错邮箱没收到验证信 → 名字被锁 1 分钟」
+  // 先分别查询 username 与 email 是否被占用，统一返回 409 消息
+  // 若直接 INSERT 并捕获 UNIQUE 异常，由于异常时机因命中列不同而存在差异，
+  // 攻击者可借助响应时间差区分「username 已存在」与「email 已存在」
+  // 顺便 sweep 一次：清掉过期 pending 用户，避免「填错邮箱未收信 → 用户名被锁定」的情况
   const expiredNow = db.sweepExpiredPendingUsers();
   for (const u of expiredNow) {
-    // targetId=null：写审计时用户已删，FK 会失败；detail 里带 username/email 足够追溯
+    // targetId=null：写入审计时记录已被删除，外键约束会失败
+    // 在 detail 中携带 username 与 email 足以满足追溯需要
     audit.log({ actorId: null, targetId: null, action: 'user.expired', detail: { username: u.username, email: u.email } });
   }
   const userByName = db.prepare('SELECT 1 FROM users WHERE username = ?').get(username);
@@ -271,8 +282,8 @@ router.post('/register', writeLimiter, emailRegisterLimiter, async (req, res) =>
       user = await createUser({ username, password: pw, preHashed, role: 'user', email, status: 'pending', verifyToken, verifyExpires });
       const result = await mailer.sendVerifyEmail(verifyToken, email, username, req);
       if (!result.sent && process.env.NODE_ENV !== 'production') {
-        // 仅在非生产环境把激活链接打到日志（开发时 SMTP 未配置也能激活），
-        // 生产环境不输出 token，避免验证令牌泄露给日志读取者
+        // 仅在非生产环境将激活链接输出到日志（便于开发时未配置 SMTP 也能激活）
+        // 生产环境不输出 token，避免验证令牌泄露给日志收集者
         console.log(`[dev] verify link for ${email}: /api/verify?token=${verifyToken}`);
       }
     } else {
@@ -374,10 +385,10 @@ router.get('/verify', (req, res) => {
   </main>
 </body></html>`);
   };
-  // Referer/Origin 校验：防止恶意站点用 <img src=".../api/verify?token=xxx">
-  // 嵌入网页/邮件，诱导用户访问触发激活。
-  // 邮件客户端通常 Referer 为空（直接打开），而浏览器访问自己博客时 Referer 同站或为空。
-  // 仅当 Referer 存在且不指向本站时拒绝（邮件客户端场景兼容）。
+  // Referer / Origin 校验：防止恶意站点通过 <img src=".../api/verify?token=xxx">
+  // 嵌入网页或邮件，诱导用户访问触发激活
+  // 邮件客户端通常 Referer 为空（直接打开链接），浏览器访问自己博客时 Referer 可能为空或同站
+  // 仅当 Referer 存在且不指向本站时才拒绝（兼容邮件客户端场景）
   const ref = req.headers.referer || req.headers.origin;
   if (ref) {
     try {
@@ -392,33 +403,33 @@ router.get('/verify', (req, res) => {
           link: '/login/', linkText: '去登录',
         });
       }
-    } catch { /* Referer 解析失败按通过处理，不影响真实用户 */ }
+    } catch { /* Referer 解析失败按通过处理，不影响真实用户访问 */ }
   }
 
   const token = typeof req.query.token === 'string' ? req.query.token.trim() : '';
   if (!token) return renderPage({
     status: 400, title: '验证失败',
     heading: '链接无效',
-    message: '链接里没有验证令牌,请回到邮件里复制完整链接,或者重新发起一次注册。',
+    message: '链接中缺少验证令牌，请回到邮件复制完整链接，或重新发起一次注册。',
     link: '/login/', linkText: '去登录',
   });
   const row = db.prepare('SELECT id FROM users WHERE verify_token = ? AND status = ?').get(token, 'pending');
   if (!row) return renderPage({
     status: 400, title: '验证失败',
     heading: '链接已失效',
-    message: '验证链接不存在、已用过或已超过 15 分钟。请重新登录看看,或在个人主页发起新的验证。',
+    message: '验证链接不存在、已使用或已超过 15 分钟有效期限。请重新登录或前往个人主页发起新的验证。',
     link: '/login/', linkText: '去登录',
   });
   db.prepare('UPDATE users SET status = ?, verify_token = NULL, verify_expires = NULL WHERE id = ?').run('active', row.id);
   renderPage({
     status: 200, title: '已验证',
     heading: '邮箱已激活',
-    message: '账号已激活,现在可以登录了。',
+    message: '账号已激活，现在可以登录。',
     link: '/login/', linkText: '前往登录',
   });
 });
 
-// —— 登录 ——
+// 登录
 
 // POST /api/login：用户名密码登录
 // 接受 password_hash（推荐）或 password（回退）
@@ -455,8 +466,8 @@ router.post('/login', loginLimiter, async (req, res) => {
     return res.status(409).json({ error: 'email not verified' });
   }
 
-  // 登录成功：先清掉旧 cookie 再签发新的，防 Session Fixation
-  // （攻击者在公共电脑预设 cookie，等用户登录后继续使用旧 cookie）
+  // 登录成功：先清除旧 cookie 再签发新 token，防止 Session Fixation
+  // （攻击者预先在公共电脑植入 cookie，等待用户登录后继续沿用旧 cookie）
   clearSessionCookie(res);
   setSessionCookie(req, res, user.id);
   audit.log({ actorId: user.id, targetId: user.id, action: 'user.login', detail: { username } });
@@ -511,8 +522,8 @@ router.patch('/me', requireAuth, (req, res) => {
 });
 
 // POST /api/me/avatar：上传自己的头像（仅 JPG，≤200KB）
-// 落盘流程：写临时文件 → 事务里 SELECT+UPDATE → rename 原子切换 → 异步删旧
-// rename 在同文件系统内原子，DB 永远不会指向不存在的文件
+// 落盘流程：写入临时文件 → 在事务中 SELECT + UPDATE → rename 原子切换 → 异步删除旧文件
+// rename 在同一文件系统内为原子操作，DB 永远不会指向磁盘上不存在的文件
 router.post('/me/avatar', requireAuth, writeLimiter, async (req, res) => {
   let form;
   try {
@@ -541,30 +552,31 @@ router.post('/me/avatar', requireAuth, writeLimiter, async (req, res) => {
   const storedName = crypto.randomUUID() + ext;
   const tmpName = storedName + '.tmp';
   try {
-    // 1. 写临时文件（半成品，不可见）
+    // 1. 写入临时文件（半成品，对外不可见）
     await fs.promises.writeFile(path.join(AVATAR_DIR, tmpName), buf);
-    // 2. 事务里换 DB 指针（同步：better-sqlite3 事务是同步 API）
+    // 2. 在事务内切换 DB 指针（better-sqlite3 事务为同步 API）
     const prev = db.transaction(() => {
       const row = db.prepare('SELECT avatar_filename FROM users WHERE id = ?').get(req.user.id);
       db.prepare('UPDATE users SET avatar_filename = ? WHERE id = ?').run(storedName, req.user.id);
       return row;
     })();
-    // 3. 原子切换：rename 同 FS 内原子，DB 已指新文件名，磁盘新文件保证存在
+    // 3. 原子切换：同一文件系统内 rename 为原子操作
+    // DB 已指向新文件名，磁盘上的新文件此时必定存在
     await fs.promises.rename(path.join(AVATAR_DIR, tmpName), path.join(AVATAR_DIR, storedName));
-    // 4. 异步删旧文件，失败不影响响应
+    // 4. 异步删除旧文件，失败不影响响应
     if (prev && prev.avatar_filename) {
       fs.promises.unlink(path.join(AVATAR_DIR, prev.avatar_filename)).catch(() => {});
     }
     return res.status(201).json({ avatar_url: `/avatar/${storedName}` });
   } catch (e) {
     console.error('avatar upload failed:', e);
-    // 兜底：清理可能残留的 tmp（不影响已存在的旧文件或新文件）
+    // 兜底：清理可能残留的临时文件（不影响已存在的旧文件或新文件）
     fs.promises.unlink(path.join(AVATAR_DIR, tmpName)).catch(() => {});
     return res.status(500).json({ error: 'failed to upload avatar' });
   }
 });
 
-// —— 用户管理（仅管理员） ——
+// 用户管理接口（仅管理员）
 
 // GET /api/users：列出所有用户
 router.get('/users', requireAuth, requireAdmin, (_req, res) => {
@@ -646,19 +658,19 @@ router.patch('/users/:id/password', requireAuth, writeLimiter, async (req, res) 
   res.status(204).end();
 });
 
-// PATCH /api/users/:id/role：任命/降级角色（仅全局管理员）
-// role  ∈  admin（全局）/ moderator（普通管理员）/ user（普通用户）
+// PATCH /api/users/:id/role：任命或降级角色（仅全局管理员）
+// role 可选值：admin（全局）/ moderator（普通管理员）/ user（普通用户）
 router.patch('/users/:id/role', requireAuth, requireAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'invalid id' });
   const parsed = z.object({ role: z.enum(['admin', 'moderator', 'user']) }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid role' });
   const { role } = parsed.data;
-  // 不允许全局管理员降级自己，避免把自己锁在角色管理之外
+  // 不允许全局管理员降级自己，避免将自己锁在角色管理之外
   if (id === req.user.id && role !== 'admin') {
     return res.status(400).json({ error: 'cannot demote yourself' });
   }
-  // 记录改之前的角色，用于审计
+  // 记录修改前的角色，用于审计
   const before = db.prepare('SELECT role FROM users WHERE id = ?').get(id);
   const info = db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, id);
   if (info.changes === 0) return res.status(404).json({ error: 'not found' });
@@ -669,9 +681,9 @@ router.patch('/users/:id/role', requireAuth, requireAdmin, (req, res) => {
   res.status(204).end();
 });
 
-// —— 站点级配置（仅全局管理员） ——
+// 站点级配置接口（仅全局管理员）
 
-// GET /api/site/smtp：读取开放注册邮件配置（不回显明文密码）
+// GET /api/site/smtp：读取邮件配置（不回显明文密码）
 router.get('/site/smtp', requireAuth, requireAdmin, (_req, res) => {
   const row = db.prepare("SELECT value FROM status_config WHERE key = 'smtp'").get();
   let cfg = {};
@@ -705,11 +717,11 @@ router.put('/site/smtp', requireAuth, requireAdmin, (req, res) => {
   const cfg = {
     host: d.host,
     port: d.port,
-    // 不传 secure 视为沿用旧值；显式传 true/false 才覆盖
+    // 未传入 secure 时视为沿用旧值；显式传入 true / false 才会覆盖
     secure: typeof d.secure === 'boolean' ? d.secure : !!prev.secure,
     user: d.user,
-    // 用户没传新密码 → 沿用旧值（已经是密文了，不用再加密）
-    // 用户传了新密码 → 加密后落库
+    // 未传入新密码 → 沿用旧密文
+    // 传入新密码 → 加密后落库
     pass: d.pass ? cryptoBox.encrypt(d.pass) : (prev.pass || ''),
     sender: d.sender,
   };

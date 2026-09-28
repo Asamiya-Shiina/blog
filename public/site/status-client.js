@@ -11,15 +11,15 @@
  */
 
 (() => {
-  // DOM 引用：状态点、状态文字、内容容器
+  // DOM 引用：状态点、状态文字与内容容器
   const dot = document.getElementById('status-dot');
   const label = document.getElementById('status-label');
   const content = document.getElementById('status-content');
 
   /**
    * 应用名 → emoji 图标映射
-   * key 来自桌面客户端上报的 processName（小写化），由 src/db.js 的默认 appNames 决定
-   * 匹配不到的应用会回落到默认图标（💻）
+   * key 为桌面客户端上报的 processName（小写形式），由 src/db.js 的默认 appNames 决定
+   * 未匹配到时回退到默认图标（💻）
    */
   const appIcons = {
     'code': '📝',
@@ -40,7 +40,7 @@
   /** 查找 emoji 图标，未匹配返回默认电脑图标 */
   function getIcon(key) { return appIcons[key] || '💻'; }
 
-  /** HTML 实体转义，防止应用名/窗口标题里的特殊字符破坏 DOM */
+  /** HTML 实体转义，防止应用名或窗口标题中包含的特殊字符破坏 DOM 结构 */
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({
       '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
