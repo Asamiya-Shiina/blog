@@ -1,0 +1,52 @@
+﻿__CSS_COMMENT_
+.upload-zone {
+  border: 2px dashed rgba(0, 0, 0, 0.15);
+  border-radius: 14px;
+  padding: 32px 24px;
+  text-align: center;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.5);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.upload-zone:hover,
+.upload-zone.is-dragover {
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.06);
+}
+.upload-zone .hint {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 8px;
+}
+.upload-zone strong { color: var(--fg); }
+.upload-zone input[type=file] { display: none; }
+
+.active-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+.active-banner .badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+}
+.active-banner .name { font-weight: 600; }
+.active-banner .meta 
+color: var(--muted)
+font-size: 13px
+
+
+.tag-active {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent-dark);
+}

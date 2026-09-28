@@ -4,58 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>留言板</title>
-  <style>
-    :root { --fg: #1a1a1a; --muted: #6b6b6b; --accent: #3b82f6; --line: rgba(0,0,0,0.08); }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; min-height: 100vh; color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
-    body { background: url('/image/IMG_20250703_100031.jpeg') center/cover no-repeat fixed; position: relative; overflow-x: hidden; }
-    body::before { content: ''; position: fixed; inset: 0; background: rgba(255, 255, 255, 0.45); backdrop-filter: blur(10px) saturate(120%); -webkit-backdrop-filter: blur(10px) saturate(120%); pointer-events: none; z-index: 0; }
-    .wrap { position: relative; z-index: 1; max-width: 720px; margin: 48px auto; padding: 0 20px 64px; }
-    h1 { font-family: Georgia, "Times New Roman", "Songti SC", serif; font-weight: 400; font-size: 30px; margin: 0 0 8px; }
-    .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
-    .topbar a { color: var(--muted); text-decoration: none; font-size: 14px; }
-    .topbar a:hover { color: var(--accent); }
-    .card { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%); border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08); padding: 24px; margin-bottom: 18px; animation: fadeUp 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
-    @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-    textarea { width: 100%; min-height: 90px; padding: 11px 14px; font: inherit; font-size: 15px; color: var(--fg); background: rgba(255, 255, 255, 0.6); border: 1px solid var(--line); border-radius: 10px; resize: vertical; outline: none; }
-    textarea:focus { border-color: var(--accent); background: rgba(255, 255, 255, 0.9); }
-    .btn { display: inline-block; padding: 8px 18px; border: 0; border-radius: 8px; font: inherit; font-size: 14px; cursor: pointer; background: var(--accent); color: #fff; transition: background 0.2s ease, transform 0.15s ease; }
-    .btn:hover { background: #2563eb; }
-    .btn:active { transform: scale(0.97); }
-    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
-    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
-    .btn-ghost:hover { background: rgba(0,0,0,0.04); color: var(--fg); }
-    .meta { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); margin-bottom: 8px; flex-wrap: wrap; }
-    .avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: rgba(0,0,0,0.06); flex-shrink: 0; }
-    .meta-text { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .meta .name { color: var(--fg); font-weight: 600; }
-    .role-tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: rgba(59,130,246,0.1); color: var(--accent); }
-    .role-tag.admin { background: rgba(220,38,38,0.1); color: #dc2626; }
-    .role-tag.moderator { background: rgba(34,197,94,0.1); color: #16a34a; }
-    .time-loc { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
-    .loc { font-size: 12px; }
-    .content { white-space: pre-wrap; word-break: break-word; margin: 6px 0 12px; }
-    .actions { display: flex; gap: 12px; font-size: 13px; }
-    .actions button { background: none; border: 0; padding: 0; color: var(--muted); cursor: pointer; font: inherit; font-size: 13px; }
-    .actions button:hover { color: var(--accent); }
-    .actions .del:hover { color: #dc2626; }
-    .replies { margin-top: 14px; padding-left: 18px; border-left: 2px solid var(--line); }
-    .replies .card { background: rgba(255, 255, 255, 0.65); padding: 16px 18px; }
-    .reply-form { display: none; margin-top: 12px; }
-    .reply-form.is-open { display: block; }
-    .reply-form textarea { min-height: 60px; }
-    .reply-form .actions-row { display: flex; gap: 8px; margin-top: 8px; }
-    .empty { color: var(--muted); text-align: center; padding: 32px 0; }
-    .error { color: #dc2626; font-size: 13px; margin-top: 6px; min-height: 1em; }
-    .login-hint { background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2); border-radius: 10px; padding: 14px 18px; color: var(--fg); }
-    .login-hint a { color: var(--accent); text-decoration: none; font-weight: 500; }
-    /* —— 手机：收紧留白与卡片边距，让留言占满屏宽 —— */
-    @media (max-width: 560px) {
-      .wrap { margin: 28px auto; padding: 0 16px 56px; }
-      .card { padding: 18px 16px; }
-      .topbar { margin-bottom: 16px; }
-    }
-  </style>
+  <link rel="stylesheet" href="/board/board.css" />
 </head>
 <body>
   <div class="wrap">

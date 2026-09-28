@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Asamiya · 状态管理</title>
   <link rel="stylesheet" href="/managers/admin.css" />
+  <link rel="stylesheet" href="/managers/status/status.css" />
 </head>
 <body>
   <div class="page">
@@ -107,37 +108,5 @@
 
   <script src="/managers/admin.js"></script>
   <script src="/managers/status/status.js"></script>
-
-  <style>
-    .status-info p { margin: 4px 0; }
-    .help { color: var(--muted); font-size: 13px; margin: 4px 0 8px; }
-    .tag {
-      display: inline-block;
-      padding: 4px 10px;
-      background: rgba(0,0,0,0.05);
-      border-radius: 6px;
-      font-size: 13px;
-      margin: 3px;
-    }
-    .tag-remove {
-      cursor: pointer;
-      margin-left: 6px;
-      color: var(--muted);
-    }
-    .tag-remove:hover { color: var(--danger); }
-    .toolbar {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-    .toolbar input {
-      padding: 6px 10px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      font-size: 13px;
-      outline: none;
-    }
-    .toolbar input:focus { border-color: var(--accent); }
-  </style>
 </body>
 </html>

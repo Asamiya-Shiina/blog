@@ -308,70 +308,9 @@ router.get('/verify', (req, res) => {
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>${title}</title>
 <link rel="stylesheet" href="/site/site.css" />
-<style>
-  html, body {
-    margin: 0; padding: 0; min-height: 100vh;
-    color: var(--fg);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
-                 "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-    background: url('/image/IMG_20250703_100031.jpeg') center/cover no-repeat fixed;
-    border-radius: 0;
-    overflow: hidden;
-  }
-  body::before {
-    content: ''; position: fixed; inset: 0;
-    background: rgba(255, 255, 255, 0.45);
-    backdrop-filter: blur(8px) saturate(120%);
-    -webkit-backdrop-filter: blur(8px) saturate(120%);
-    border-radius: 0;
-    pointer-events: none; z-index: 0;
-  }
-  .wrap {
-    position: relative; z-index: 1; min-height: 100vh;
-    display: flex; align-items: center; justify-content: center; padding: 24px;
-  }
-  .card {
-    text-align: center; max-width: 380px; width: 100%; padding: 44px 32px;
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(20px) saturate(140%);
-    -webkit-backdrop-filter: blur(20px) saturate(140%);
-    border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.6);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-    animation: fadeUp 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both;
-  }
-  .mark {
-    width: 56px; height: 56px; margin: 0 auto 20px;
-    border-radius: 50%; display: flex; align-items: center; justify-content: center;
-    font-size: 28px; color: #fff;
-  }
-  .mark.ok  { background: #22c55e; }
-  .mark.bad { background: #ef4444; }
-  h1 {
-    font-family: Georgia, "Times New Roman", "Songti SC", serif;
-    font-weight: 400; font-size: 28px;
-    margin: 0 0 12px; line-height: 1.3;
-  }
-  p {
-    color: var(--muted); font-size: 14px;
-    margin: 0 0 28px; line-height: 1.6;
-  }
-  .actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  .btn {
-    display: inline-block; padding: 10px 18px; border-radius: 10px;
-    font-size: 14px; text-decoration: none; transition: background 0.2s ease, transform 0.15s ease;
-  }
-  .btn-primary { background: var(--accent); color: #fff; }
-  .btn-primary:hover { background: #2563eb; }
-  .btn-primary:active { transform: scale(0.98); }
-  .btn-ghost {
-    background: transparent; color: var(--muted);
-    border: 1px solid rgba(0, 0, 0, 0.15);
-  }
-  .btn-ghost:hover { color: var(--fg); }
-  @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-</style>
+<link rel="stylesheet" href="/site/site-pages.css" />
 </head>
-<body>
+<body class="verify-page">
   <main class="wrap">
     <div class="card">
       <div class="mark ${status === 400 ? 'bad' : 'ok'}">${status === 400 ? '×' : '✓'}</div>

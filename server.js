@@ -97,8 +97,7 @@ app.use((_req, res, next) => {
   // 内容安全策略（CSP）：
   //   - default-src 'self'              仅允许同源资源
   //   - script-src 'self'               禁止内联脚本（脚本已外置到 .js 文件）
-  //   - style-src 'self' 'unsafe-inline'
-  //        各页面存在大量 <style> 块，全部外置成本过高，暂保留 'unsafe-inline'
+  //   - style-src 'self'                只允许同源 CSS（所有 <style> 块已外置到 .css 文件）
   //   - style-src-attr 'none'           显式禁止 HTML style="..." 属性中的内联样式
   //        杜绝 background:url(//evil/?x=...)、@import 等方式的数据渗出攻击
   //   - img-src 'self' data:            data: 用于头像占位
@@ -109,7 +108,7 @@ app.use((_req, res, next) => {
   res.setHeader('Content-Security-Policy',
     "default-src 'self'; " +
     "script-src 'self'; " +
-    "style-src 'self' 'unsafe-inline'; " +
+    "style-src 'self'; " +
     "style-src-attr 'none'; " +
     "img-src 'self' data:; " +
     "media-src 'self'; " +
@@ -141,44 +140,9 @@ const NOT_FOUND_HTML = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>404</title>
 <link rel="stylesheet" href="/site/site.css" />
-<style>
-  body {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    overflow: hidden;
-  }
-  .not-found {
-    position: relative;
-    z-index: 1;
-    text-align: center;
-    padding: 0 20px;
-  }
-  .not-found h1 {
-    font-family: Georgia, "Times New Roman", "Songti SC", serif;
-    font-weight: 400;
-    font-size: 56px;
-    line-height: 1.2;
-    margin: 0 0 24px;
-  }
-  .not-found p {
-    color: var(--muted);
-    font-size: 18px;
-    margin: 0 0 32px;
-  }
-  .not-found a {
-    color: var(--accent);
-    text-decoration: none;
-    border-bottom: 1px solid rgba(59, 130, 246, 0.3);
-  }
-  .not-found a:hover { border-bottom-color: var(--accent); }
-  @media (max-width: 560px) {
-    .not-found h1 { font-size: 42px; }
-  }
-</style>
+<link rel="stylesheet" href="/site/site-pages.css" />
 </head>
-<body>
+<body class="not-found-page">
   <div class="not-found">
     <h1>Oops! 该页面不存在</h1>
     <p>Not Found: 404...</p>

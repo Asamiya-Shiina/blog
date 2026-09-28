@@ -1,4 +1,4 @@
-/* —— 共享设计令牌 —— */
+/* 鈥斺€?鍏变韩璁捐浠ょ墝 鈥斺€?*/
 :root {
   --fg: #1a1a1a;
   --muted: #6b6b6b;
@@ -39,9 +39,12 @@ body::before {
   pointer-events: none;
   z-index: 0;
 }
-.page { position: relative; z-index: 1; }
+.page {
+  position: relative;
+  z-index: 1;
+}
 
-/* —— 顶部导航 —— */
+/* 鈥斺€?椤堕儴瀵艰埅 鈥斺€?*/
 .topbar {
   position: sticky;
   top: 0;
@@ -75,8 +78,14 @@ body::before {
   font-size: 14px;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.topbar nav a:hover { background: rgba(0,0,0,0.05); color: var(--fg); }
-.topbar nav a.is-active { background: rgba(59,130,246,0.1); color: var(--accent-dark); }
+.topbar nav a:hover {
+  background: rgba(0,0,0,0.05);
+  color: var(--fg);
+}
+.topbar nav a.is-active {
+  background: rgba(59,130,246,0.1);
+  color: var(--accent-dark);
+}
 .topbar .spacer { flex: 1; }
 .topbar .user {
   font-size: 13px;
@@ -95,7 +104,7 @@ body::before {
 }
 .topbar .logout:hover { background: rgba(0,0,0,0.05); }
 
-/* —— 主体容器 —— */
+/* 鈥斺€?涓讳綋瀹瑰櫒 鈥斺€?*/
 .container {
   max-width: 980px;
   margin: 0 auto;
@@ -104,7 +113,7 @@ body::before {
 .container.narrow { max-width: 760px; }
 .container.wide   { max-width: 1280px; }
 
-/* —— 卡片 / 分组 —— */
+/* 鈥斺€?鍗＄墖 / 鍒嗙粍 鈥斺€?*/
 .card {
   background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(14px) saturate(140%);
@@ -122,7 +131,7 @@ body::before {
   margin: 0 0 14px;
 }
 
-/* —— 概览数字 —— */
+/* 鈥斺€?姒傝鏁板瓧 鈥斺€?*/
 .stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -143,9 +152,12 @@ body::before {
   line-height: 1;
   margin-bottom: 6px;
 }
-.stat .label { color: var(--muted); font-size: 13px; }
+.stat .label {
+  color: var(--muted);
+  font-size: 13px;
+}
 
-/* —— 按钮 —— */
+/* 鈥斺€?鎸夐挳 鈥斺€?*/
 .btn {
   display: inline-block;
   padding: 9px 18px;
@@ -158,17 +170,34 @@ body::before {
   text-decoration: none;
   transition: background 0.2s ease, transform 0.15s ease, opacity 0.2s ease;
 }
-.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
 .btn-primary:hover { background: var(--accent-dark); }
 .btn-primary:active { transform: scale(0.98); }
-.btn-ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+.btn-ghost {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--line);
+}
 .btn-ghost:hover { background: rgba(0,0,0,0.04); }
-.btn-danger { background: transparent; color: var(--danger); border: 1px solid rgba(220,38,38,0.3); }
+.btn-danger {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid rgba(220,38,38,0.3);
+}
 .btn-danger:hover { background: var(--danger-bg); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
-/* —— 表单 —— */
-label.field { display: block; margin-bottom: 16px; }
+/* 鈥斺€?琛ㄥ崟 鈥斺€?*/
+label.field {
+  display: block;
+  margin-bottom: 16px;
+}
 label.field > .lbl {
   display: block;
   font-size: 13px;
@@ -191,10 +220,15 @@ input:focus, textarea:focus, select:focus {
   border-color: var(--accent);
   background: rgba(255, 255, 255, 0.92);
 }
-textarea { resize: vertical; min-height: 100px; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; line-height: 1.55; }
+textarea {
+  resize: vertical;
+  min-height: 100px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  line-height: 1.55;
+}
 textarea.large { min-height: 360px; }
 
-/* —— 表格 —— */
+/* 鈥斺€?琛ㄦ牸 鈥斺€?*/
 table {
   width: 100%;
   border-collapse: collapse;
@@ -211,10 +245,13 @@ th {
   text-transform: uppercase;
   letter-spacing: 1px;
 }
-tr.row { cursor: pointer; transition: background 0.15s ease; }
+tr.row {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
 tr.row:hover { background: rgba(0, 0, 0, 0.03); }
 
-/* —— 徽标 —— */
+/* 鈥斺€?寰芥爣 鈥斺€?*/
 .tag {
   display: inline-block;
   padding: 2px 8px;
@@ -222,10 +259,16 @@ tr.row:hover { background: rgba(0, 0, 0, 0.03); }
   font-size: 12px;
   font-weight: 500;
 }
-.tag-draft     { background: rgba(0,0,0,0.06); color: var(--muted); }
-.tag-published { background: rgba(34,197,94,0.12); color: #15803d; }
+.tag-draft {
+  background: rgba(0,0,0,0.06);
+  color: var(--muted);
+}
+.tag-published {
+  background: rgba(34,197,94,0.12);
+  color: #15803d;
+}
 
-/* —— 工具栏 —— */
+/* 鈥斺€?宸ュ叿鏍?鈥斺€?*/
 .toolbar {
   display: flex;
   gap: 10px;
@@ -233,9 +276,12 @@ tr.row:hover { background: rgba(0, 0, 0, 0.03); }
   margin-bottom: 16px;
   flex-wrap: wrap;
 }
-.toolbar input[type=search] { flex: 1; min-width: 180px; }
+.toolbar input[type=search] {
+  flex: 1;
+  min-width: 180px;
+}
 
-/* —— 提示 —— */
+/* 鈥斺€?鎻愮ず 鈥斺€?*/
 .notice {
   padding: 12px 14px;
   border-radius: 10px;
@@ -244,11 +290,20 @@ tr.row:hover { background: rgba(0, 0, 0, 0.03); }
   display: none;
 }
 .notice.is-visible { display: block; }
-.notice.error   { color: var(--danger); background: var(--danger-bg); }
-.notice.success { color: #15803d; background: rgba(34,197,94,0.1); }
-.notice.info    { color: var(--accent-dark); background: rgba(59,130,246,0.1); }
+.notice.error {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+.notice.success {
+  color: #15803d;
+  background: rgba(34,197,94,0.1);
+}
+.notice.info {
+  color: var(--accent-dark);
+  background: rgba(59,130,246,0.1);
+}
 
-/* —— 编辑器双栏 —— */
+/* 鈥斺€?缂栬緫鍣ㄥ弻鏍?鈥斺€?*/
 .editor {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -289,80 +344,129 @@ tr.row:hover { background: rgba(0, 0, 0, 0.03); }
   border-radius: 8px;
   overflow-x: auto;
 }
-.preview pre code { background: transparent; padding: 0; }
+.preview pre code {
+  background: transparent;
+  padding: 0;
+}
 .preview blockquote {
   margin: 0 0 1em;
   padding: 0 1em;
   border-left: 3px solid var(--line);
   color: var(--muted);
 }
-.preview img { max-width: 100%; height: auto; border-radius: 6px; }
+.preview img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
 
-/* —— 空状态 —— */
+/* 鈥斺€?绌虹姸鎬?鈥斺€?*/
 .empty {
   text-align: center;
   color: var(--muted);
   padding: 40px 20px;
 }
 
-/* —— 通用提示 —— */
+/* 鈥斺€?閫氱敤鎻愮ず 鈥斺€?*/
 .muted { color: var(--muted); }
-.msg { font-size: 14px; margin-top: 12px; min-height: 1em; }
+.msg {
+  font-size: 14px;
+  margin-top: 12px;
+  min-height: 1em;
+}
 .msg.ok { color: #15803d; }
 .msg.bad { color: #b91c1c; }
 
-/* —— 精致化：只增强质感，不改变布局 —— */
-/* 背景更通透，毛玻璃感更足 */
+/* 鈥斺€?绮捐嚧鍖栵細鍙寮鸿川鎰燂紝涓嶆敼鍙樺竷灞€ 鈥斺€?*/
+/* 鑳屾櫙鏇撮€氶€忥紝姣涚幓鐠冩劅鏇磋冻 */
 body::before {
   background: rgba(255, 255, 255, 0.62);
   backdrop-filter: blur(10px) saturate(130%);
   -webkit-backdrop-filter: blur(10px) saturate(130%);
 }
-/* 卡片阴影更细腻、有层次 */
+/* 鍗＄墖闃村奖鏇寸粏鑵汇€佹湁灞傛 */
 .card, .stat { box-shadow: 0 8px 30px rgba(0, 0, 0, 0.07); }
-/* 表格斑马纹，降低整行 hover 的跳跃感 */
+/* 琛ㄦ牸鏂戦┈绾癸紝闄嶄綆鏁磋 hover 鐨勮烦璺冩劅 */
 tbody tr:nth-child(odd) { background: rgba(0, 0, 0, 0.015); }
-/* 细滚动条与输入框聚焦光晕 */
-* { scrollbar-width: thin; scrollbar-color: rgba(0, 0, 0, 0.18) transparent; }
-*::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.18); border-radius: 999px; }
+/* 缁嗘粴鍔ㄦ潯涓庤緭鍏ユ鑱氱劍鍏夋檿 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 999px;
+}
 *::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.3); }
 input:focus, textarea:focus, select:focus { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
-/* 键盘操作可见焦点（可访问性） */
-:focus-visible { outline: 2px solid rgba(59, 130, 246, 0.55); outline-offset: 2px; }
+/* 閿洏鎿嶄綔鍙鐒︾偣锛堝彲璁块棶鎬э級 */
+:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.55);
+  outline-offset: 2px;
+}
 
-/* —— 替代被 CSP style-src-attr 'none' 拦截的内联样式集中定义 —— */
-/* 文本 */
-.muted-sm  { color: var(--muted); font-size: 13px; }
-.muted-xs  { color: var(--muted); font-size: 12px; }
-.danger-sm { color: var(--danger); font-size: 13px; }
+/* 鈥斺€?鏇夸唬琚?CSP style-src-attr 'none' 鎷︽埅鐨勫唴鑱旀牱寮忛泦涓畾涔?鈥斺€?*/
+/* 鏂囨湰 */
+.muted-sm {
+  color: var(--muted);
+  font-size: 13px;
+}
+.muted-xs {
+  color: var(--muted);
+  font-size: 12px;
+}
+.danger-sm {
+  color: var(--danger);
+  font-size: 13px;
+}
 .muted-tx  { color: var(--muted); }
 .danger-tx { color: var(--danger); }
 .t-right   { text-align: right; }
 .t-center  { text-align: center; }
 .nowrap    { white-space: nowrap; }
-.ellipsis  { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ellipsis {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .hide      { display: none !important; }
 
-/* 表格列宽 */
+/* 琛ㄦ牸鍒楀 */
 .col-status  { width: 11%; }
 .col-cats    { width: 16%; }
 .col-updated { width: 16%; }
-.col-actions { width: 15%; text-align: right; }
+.col-actions {
+  width: 15%;
+  text-align: right;
+}
 .col-num-15  { width: 15%; }
 .col-time-15 { width: 15%; }
-.col-act-20  { width: 20%; text-align: right; }
+.col-act-20 {
+  width: 20%;
+  text-align: right;
+}
 .col-name-40 { width: 40%; }
 .col-role-15 { width: 15%; }
 .col-created-20 { width: 20%; }
 .col-42 { width: 42%; }
 .col-10 { width: 10%; }
 .col-18 { width: 18%; }
-.col-30 { width: 30%; text-align: right; }
+.col-30 {
+  width: 30%;
+  text-align: right;
+}
 
-/* 工具栏 / 表单 */
+/* 宸ュ叿鏍?/ 琛ㄥ崟 */
 .toolbar + .toolbar              { margin-top: 12px; }
-.toolbar .gap-10                 { display: flex; gap: 10px; align-items: center; }
+.toolbar .gap-10 {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
 .toolbar.compact .field          { margin-bottom: 0; }
 .toolbar.align-end               { justify-content: flex-end; }
 .input-w-140 { width: 140px; }
@@ -372,69 +476,194 @@ input:focus, textarea:focus, select:focus { box-shadow: 0 0 0 3px rgba(59, 130, 
 .input-w-220 { max-width: 220px; }
 .input-h-64  { min-height: 64px; }
 
-/* 卡片变体 */
+/* 鍗＄墖鍙樹綋 */
 .card.tight       { padding: 0; }
-.card.tight-top   { padding: 0; margin-top: 16px; }
-.card.tight-mt24  { padding: 0; margin-top: 24px; }
-.card.flex-row    { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.card.flex-gap    { display: flex; gap: 10px; align-items: center; }
+.card.tight-top {
+  padding: 0;
+  margin-top: 16px;
+}
+.card.tight-mt24 {
+  padding: 0;
+  margin-top: 24px;
+}
+.card.flex-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.card.flex-gap {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
 
-/* 内部布局 */
-.title-row-2col   { display: grid; grid-template-columns: 1fr 180px; gap: 16px; }
-.between-row      { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.flex-end-8       { display: flex; gap: 8px; margin-top: 10px; }
-.flex-end-row     { display: flex; justify-content: flex-end; margin-top: 8px; }
+/* 鍐呴儴甯冨眬 */
+.title-row-2col {
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  gap: 16px;
+}
+.between-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.flex-end-8 {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.flex-end-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
 .mt-12            { margin-top: 12px; }
 .ml-8             { margin-left: 8px; }
 
-/* 动态行用(被 posts.js / overview.js 等生成的行) */
-.row-item         { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
-.row-item .title  { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row-meta         { color: var(--muted); font-size: 12px; }
-.row-time         { color: var(--muted); font-size: 13px; }
-.row-actions      { text-align: right; white-space: nowrap; }
-.row-original     { color: var(--muted); font-size: 12px; margin-top: 2px; }
-.row-tags-empty   { color: var(--muted); font-size: 12px; }
+/* 鍔ㄦ€佽鐢?琚?posts.js / overview.js 绛夌敓鎴愮殑琛? */
+.row-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.row-item .title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+.row-time {
+  color: var(--muted);
+  font-size: 13px;
+}
+.row-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.row-original {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+.row-tags-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
 
-/* 模态框(后台音乐预览) */
-.modal-card       { background: rgba(255,255,255,0.95); border-radius: 14px; padding: 24px; width: min(420px, 90vw); box-shadow: 0 12px 48px rgba(0,0,0,0.25); }
-.modal-title      { font-weight: 600; margin-bottom: 12px; }
+/* 妯℃€佹(鍚庡彴闊充箰棰勮) */
+.modal-card {
+  background: rgba(255,255,255,0.95);
+  border-radius: 14px;
+  padding: 24px;
+  width: min(420px, 90vw);
+  box-shadow: 0 12px 48px rgba(0,0,0,0.25);
+}
+.modal-title {
+  font-weight: 600;
+  margin-bottom: 12px;
+}
 .modal-audio      { width: 100%; }
-.modal-actions    { text-align: right; margin-top: 14px; }
+.modal-actions {
+  text-align: right;
+  margin-top: 14px;
+}
 
-/* 表单内联 label(checkbox 同行) */
-.field.inline     { display: flex; align-items: center; gap: 8px; }
+/* 琛ㄥ崟鍐呰仈 label(checkbox 鍚岃) */
+.field.inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .field.inline .lbl { margin: 0; }
 
-/* 滑块验证码 notch */
+/* 婊戝潡楠岃瘉鐮?notch */
 .notch.hidden     { display: none; }
 
-/* 音乐上传区域 */
-.upload-meta-row  { display: flex; gap: 10px; align-items: flex-end; margin-top: 14px; flex-wrap: wrap; }
-.field.input-grow { flex: 1; min-width: 240px; margin-bottom: 0; }
-.active-banner.inactive   { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.08); }
+/* 闊充箰涓婁紶鍖哄煙 */
+.upload-meta-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.field.input-grow {
+  flex: 1;
+  min-width: 240px;
+  margin-bottom: 0;
+}
+.active-banner.inactive {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.08);
+}
 .badge.muted-badge       { background: var(--muted); }
-.device-block            { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.device-block {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
 .help-mt0                { margin-top: 0; }
-.cats-row                { display: flex; flex-wrap: wrap; gap: 8px; }
+.cats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .h2-tight                { margin: 0; }
-/* 试听遮罩层(用 JS 设 style.cssText 不受 CSP style-src-attr 影响,但类还是稳一些) */
-#preview-overlay         { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+/* 璇曞惉閬僵灞?鐢?JS 璁?style.cssText 涓嶅彈 CSP style-src-attr 褰卞搷,浣嗙被杩樻槸绋充竴浜? */
+#preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
 
-/* —— 替代被 CSP `style-src-attr 'none'` 拦截的内联样式 —— */
-/* posts/index.html 工具栏里的筛选下拉 */
-.toolbar select.status-filter   { display: none; max-width: 140px; }
-.toolbar select.category-filter { display: none; max-width: 160px; }
-/* 表格列宽 */
+/* 鈥斺€?鏇夸唬琚?CSP `style-src-attr 'none'` 鎷︽埅鐨勫唴鑱旀牱寮?鈥斺€?*/
+/* posts/index.html 宸ュ叿鏍忛噷鐨勭瓫閫変笅鎷?*/
+.toolbar select.status-filter {
+  display: none;
+  max-width: 140px;
+}
+.toolbar select.category-filter {
+  display: none;
+  max-width: 160px;
+}
+/* 琛ㄦ牸鍒楀 */
 .col-status  { width: 11%; }
 .col-cats    { width: 16%; }
 .col-updated { width: 16%; }
-.col-actions { width: 15%; text-align: right; }
-/* 表格卡片无内边距、分页工具栏 */
+.col-actions {
+  width: 15%;
+  text-align: right;
+}
+/* 琛ㄦ牸鍗＄墖鏃犲唴杈硅窛銆佸垎椤靛伐鍏锋爮 */
 .card.tight       { padding: 0; }
-.toolbar.pagination { margin-top: 16px; justify-content: flex-end; }
-/* posts.js 动态行原本的 inline 样式 */
-.row-excerpt { color: var(--muted); font-size: 12px; margin-top: 2px; }
-.row-time    { color: var(--muted); font-size: 13px; }
-/* 概览页:隐藏快速操作卡(若恢复显示,去掉 .hide-card) */
+.toolbar.pagination {
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+/* posts.js 鍔ㄦ€佽鍘熸湰鐨?inline 鏍峰紡 */
+.row-excerpt {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+.row-time {
+  color: var(--muted);
+  font-size: 13px;
+}
+/* 姒傝椤?闅愯棌蹇€熸搷浣滃崱(鑻ユ仮澶嶆樉绀?鍘绘帀 .hide-card) */
 .card.hide { display: none; }

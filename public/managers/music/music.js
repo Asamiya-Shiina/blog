@@ -97,7 +97,6 @@
     if (!overlay) {
       overlay = document.createElement('div');
       overlay.id = 'preview-overlay';
-      overlay.style.cssText = 'position:fixed;inset:0;z-index:50;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
       overlay.innerHTML = `
         <div class="modal-card">
           <div id="preview-title" class="modal-title">试听</div>
