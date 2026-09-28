@@ -43,11 +43,6 @@ body::before {
   z-index: 0;
 }
 
-.wrap {
-  position: relative;
-  z-index: 1;
-}
-
 *, *::before, *::after {
   -webkit-user-select: none;
   -moz-user-select: none;

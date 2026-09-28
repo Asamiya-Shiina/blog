@@ -162,6 +162,8 @@ header.hero p {
   margin: 0 0 2px;
   padding: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .post-head .excerpt::before {
   content: '————';

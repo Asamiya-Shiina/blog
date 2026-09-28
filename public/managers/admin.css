@@ -641,16 +641,6 @@ input:focus, textarea:focus, select:focus { box-shadow: 0 0 0 3px rgba(59, 130, 
   display: none;
   max-width: 160px;
 }
-/* 琛ㄦ牸鍒楀 */
-.col-status  { width: 11%; }
-.col-cats    { width: 16%; }
-.col-updated { width: 16%; }
-.col-actions {
-  width: 15%;
-  text-align: right;
-}
-/* 琛ㄦ牸鍗＄墖鏃犲唴杈硅窛銆佸垎椤靛伐鍏锋爮 */
-.card.tight       { padding: 0; }
 .toolbar.pagination {
   margin-top: 16px;
   justify-content: flex-end;
@@ -660,10 +650,6 @@ input:focus, textarea:focus, select:focus { box-shadow: 0 0 0 3px rgba(59, 130, 
   color: var(--muted);
   font-size: 12px;
   margin-top: 2px;
-}
-.row-time {
-  color: var(--muted);
-  font-size: 13px;
 }
 /* 姒傝椤?闅愯棌蹇€熸搷浣滃崱(鑻ユ仮澶嶆樉绀?鍘绘帀 .hide-card) */
 .card.hide { display: none; }
