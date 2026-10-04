@@ -19,6 +19,8 @@ docker-compose.override.yml
 client/build/
 client/dist/
 client/*.spec
+# 客户端运行时配置：含明文服务器地址与账号密码，绝不入库
+client_config.json
 # JetBrains IDE
 .idea/
 # Claude Code 本地配置
