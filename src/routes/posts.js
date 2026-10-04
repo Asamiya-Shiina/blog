@@ -6,25 +6,20 @@
 // by ALyCE_Aoi
 
 const express = require('express');
-const { marked } = require('marked');
-const DOMPurify = require('isomorphic-dompurify');
 const { z } = require('zod');
 
 const db = require('../db');
 const { requireManager } = require('../auth');
+const { sanitizeMarkdown } = require('../views/posts');
 const { getPostCategories } = require('./categories');
 
 const router = express.Router();
 
-// 启用 GFM（GitHub Flavored Markdown）和换行转 <br>
-marked.setOptions({ gfm: true, breaks: true });
-
-// 将 Markdown 渲染为 HTML，并通过 DOMPurify 消毒以防止 XSS
+// Markdown 渲染统一走 src/views/posts.js 的 sanitizeMarkdown()
+// 该函数是全站唯一的消毒入口，避免两处配置分叉（历史上公开文章页曾漏掉
+// FORBID_ATTR:['style']，导致同一篇文章在 API 与网页上渲染结果不一致）
 function renderHtml(md) {
-  const raw = marked.parse(md || '');
-  // 禁止 style 属性：DOMPurify 默认保留内联样式，会允许 CSS 注入
-  // （外带请求或涂改页面外观）。全站 CSP 中 style-src-attr 'none' 已作兜底，此处显式禁用更稳妥
-  return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true }, FORBID_ATTR: ['style'] });
+  return sanitizeMarkdown(md);
 }
 
 // 生成 URL 友好的 slug：小写、连字符分隔、过滤特殊字符

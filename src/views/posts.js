@@ -10,6 +10,22 @@ const DOMPurify = require('isomorphic-dompurify');
 // 启用 GFM（表格、任务列表等）+ 换行转 <br>
 marked.setOptions({ gfm: true, breaks: true });
 
+// Markdown → 消毒后的安全 HTML
+//
+// 全站唯一的 Markdown 消毒入口。
+// 历史问题：本文件与 src/routes/posts.js 各写了一份配置，且本文件漏了
+// FORBID_ATTR: ['style']，导致同一个 style 属性在公开文章页保留、在 API/预览被剥离
+// （实测确认）。公开文章页仅靠 CSP 的 style-src-attr 'none' 兜底，
+// 一旦放宽 CSP 或把 content_html 渲染到 CSP 之外（RSS/邮件/原生客户端）即成 UI 伪装。
+// 现在两处共用本函数，配置不可能再分叉。
+//
+// FORBID_ATTR: ['style'] —— DOMPurify 默认保留内联样式，会允许 CSS 注入
+// （外带请求或涂改页面外观），显式禁用更稳妥。
+function sanitizeMarkdown(md) {
+  const raw = marked.parse(md || '');
+  return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true }, FORBID_ATTR: ['style'] });
+}
+
 // HTML 实体转义：用于非 Markdown 的用户输入（如标题、摘要），防止 XSS
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, ch => ({
@@ -163,7 +179,7 @@ function renderCategoryPage(category, posts, categories, totalPosts = 0) {
 
 // 渲染文章详情页：标题、日期、摘要、Markdown 正文
 function renderPostPage(post) {
-  const html = DOMPurify.sanitize(marked.parse(post.content_md || ''), { USE_PROFILES: { html: true } });
+  const html = sanitizeMarkdown(post.content_md);
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -233,6 +249,12 @@ function renderSearchPage(q, posts) {
 }
 
 // 渲染提示页（限流、错误等）：居中显示标题和消息
+// link 只允许站内相对路径，防止 javascript: 之类的伪协议或属性逃逸
+function safeInternalLink(link) {
+  const s = String(link || '');
+  return /^\/[A-Za-z0-9/_\-.?=&%]*$/.test(s) ? s : '/posts/';
+}
+
 function renderNoticePage({ title, heading, message, link = '/posts/', linkText = '← 所有文章' }) {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -248,10 +270,10 @@ function renderNoticePage({ title, heading, message, link = '/posts/', linkText 
   <div class="notice">
     <h1>${escapeHtml(heading)}</h1>
     <p>${escapeHtml(message)}</p>
-    <a href="${link}">${escapeHtml(linkText)}</a>
+    <a href="${escapeHtml(safeInternalLink(link))}">${escapeHtml(linkText)}</a>
   </div>
 </body>
 </html>`;
 }
 
-module.exports = { renderListPage, renderPostPage, renderSearchPage, renderNoticePage, renderCategoryPage, renderFloatingUI, SHARED_HEAD };
+module.exports = { renderListPage, renderPostPage, renderSearchPage, renderNoticePage, renderCategoryPage, renderFloatingUI, SHARED_HEAD, escapeHtml, sanitizeMarkdown };

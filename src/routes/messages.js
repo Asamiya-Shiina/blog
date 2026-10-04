@@ -30,6 +30,24 @@ const writeLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// 留言读限流：每 IP 每分钟最多 60 次
+// 该端点是公开且免登录的，且每行都会触发 geoip 属地解析，
+// 无限流时可被反复调用消耗 CPU（属地为惰性加载，首次加载约 100MB）
+const readLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// 删除限流：15 分钟最多 30 次，防止高频删除
+const deleteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // 将数据库行映射为对外暴露的留言对象
 // is_owner 让前端直接判断是否可删除，无需再次比对 user_id
 // avatar_url 始终返回（头像本身是公开资源）；ip 仅管理员可见
@@ -58,31 +76,85 @@ const SELECT_SQL = `
     JOIN users u ON u.id = m.user_id
 `;
 
-// GET /api/messages：嵌套列表
-router.get('/', (req, res) => {
-  // 顶层留言按时间倒序（新→旧），回复按时间正序（旧→新，对话展示更自然）
+// GET /api/messages：嵌套列表（分页）
+//
+// 为什么要分页：
+//   旧实现无 LIMIT 全表返回，且每行都调用 formatLocation —— 这会触发 geoip-lite
+//   惰性加载（实测 RSS +101.7MB，常驻不可回收）。公开且无限流的端点叠加无界查询，
+//   是配合上传 OOM 打出服务中断的最省力路径。
+//
+// 分页语义（游标式，避免深分页 OFFSET 扫描）：
+//   默认取最新的一页（200 条顶层留言，含其回复）
+//   传 before=<id> 可继续向前翻（加载更多）：返回 id < before 的更新一页
+//   响应带 has_more，前端据此决定是否显示"加载更多"
+const PAGE_SIZE = 200;
+
+// 单页最多返回的留言总数（含回复），防止某条顶层留言回复极多时单页过大
+const MAX_ROWS = PAGE_SIZE * 3;
+
+router.get('/', readLimiter, (req, res) => {
+  const before = parseInt(req.query.before, 10);
+  const useCursor = Number.isInteger(before) && before > 0;
+
+  // 先取一页顶层留言（parent_id IS NULL），再取这些顶层留言的全部回复
+  // 这样回复不会把分页游标打乱，也不会出现"父留言不在本页"的孤儿
+  const tops = useCursor
+    ? db.prepare(`
+        SELECT id FROM messages
+        WHERE parent_id IS NULL AND id < ?
+        ORDER BY id DESC LIMIT ?
+      `).all(before, PAGE_SIZE)
+    : db.prepare(`
+        SELECT id FROM messages
+        WHERE parent_id IS NULL
+        ORDER BY id DESC LIMIT ?
+      `).all(PAGE_SIZE);
+
+  if (tops.length === 0) {
+    return res.json({ messages: [], has_more: false, next_before: null });
+  }
+
+  const topIds = tops.map(t => t.id);
+  const placeholders = topIds.map(() => '?').join(',');
+  // 取这些顶层留言本身 + 它们的全部回复（回复按时间正序展示更自然）
   const rows = db.prepare(`
     ${SELECT_SQL}
-    ORDER BY m.created_at DESC
-  `).all();
+    WHERE m.id IN (${placeholders}) OR m.parent_id IN (${placeholders})
+    ORDER BY m.created_at ASC
+  `).all(...topIds, ...topIds).slice(0, MAX_ROWS);
 
   const viewer = req.user || null;     // 允许未登录查看列表
   const byId = new Map();
-  const tops = [];
+  const orderedTops = [];
   for (const r of rows) {
     const shaped = shapeMessage(r, viewer);
     shaped.replies = [];
     byId.set(r.id, shaped);
-    if (r.parent_id == null) tops.push(shaped);
+  }
+  // 按 tops 的顺序（id 倒序 = 时间倒序）组装，回复挂到父级之下
+  for (const id of topIds) {
+    const shaped = byId.get(id);
+    if (shaped) orderedTops.push(shaped);
   }
   for (const r of rows) {
     if (r.parent_id != null) {
       const parent = byId.get(r.parent_id);
       if (parent) parent.replies.push(byId.get(r.id));
-      else tops.push(byId.get(r.id));   // 孤儿回复兜底
+      // 父级不在本页时丢弃（分页边界正常现象，不会出现孤儿展示）
     }
   }
-  res.json({ messages: tops });
+
+  // 是否还有更早的顶层留言
+  const oldest = topIds[topIds.length - 1];
+  const more = db.prepare(
+    'SELECT 1 FROM messages WHERE parent_id IS NULL AND id < ? LIMIT 1'
+  ).get(oldest);
+
+  res.json({
+    messages: orderedTops,
+    has_more: !!more,
+    next_before: more ? oldest : null,
+  });
 });
 
 // 过滤零宽字符与控制字符（除常见换行 / 制表外）
@@ -124,7 +196,7 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
 });
 
 // DELETE /api/messages/:id：作者本人或管理员
-router.delete('/:id', requireAuth, (req, res) => {
+router.delete('/:id', requireAuth, deleteLimiter, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: 'invalid id' });
   const row = db.prepare('SELECT user_id FROM messages WHERE id = ?').get(id);

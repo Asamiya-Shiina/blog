@@ -90,13 +90,27 @@ function verify(token, submittedX, track, req) {
 }
 
 // 超过上限时清理过期项，防止内存无界增长
+// 注意：绝不能用 store.clear() —— Map 的迭代顺序是插入顺序，
+// 超限时整表清空会连带清掉其他用户尚未使用的有效 token，
+// 攻击者只要刷满 2000 条就能让所有正常访客的验证码失效（注册被 DoS）。
+// 这里按插入顺序逐个驱逐最旧的条目，只牺牲最早的一批。
 function sweep() {
   if (store.size < MAX_ITEMS) return;
   const now = Date.now();
+  // 先清过期项（不影响任何人）
   for (const [k, v] of store) {
     if (now > v.expiresAt) store.delete(k);
   }
-  if (store.size > MAX_ITEMS) store.clear();
+  // 仍然超限：按插入顺序驱逐最旧的，直到回到上限的 80%
+  if (store.size >= MAX_ITEMS) {
+    const target = Math.floor(MAX_ITEMS * 0.8);
+    let drop = store.size - target;
+    for (const k of store.keys()) {
+      if (drop <= 0) break;
+      store.delete(k);
+      drop -= 1;
+    }
+  }
 }
 
 module.exports = { create, verify, sweep, WIDTH };

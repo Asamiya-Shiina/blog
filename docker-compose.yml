@@ -3,11 +3,24 @@ services:
     image: ghcr.io/asamiya-shiina/blog:latest
     build: .
     restart: unless-stopped
+    # 只监听回环：应用端口不得直接暴露公网。
+    # 原因：TRUST_PROXY=1 下 req.ip 取自 X-Forwarded-For，若外部能直连应用端口，
+    # 任何人都能伪造该头绕过全部 IP 限流（登录爆破、注册、验证码 IP 绑定同时失效）。
+    # 前置 Nginx/Caddy 反代应连接 127.0.0.1:3000。
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - NODE_ENV=production
+      # 信任一层反代。安全前提是上面的端口绑定，二者必须同时成立
       - TRUST_PROXY=1
+      # 邮件里的验证链接必须由固定域名生成，不能用客户端可控的 Host 头，
+      # 否则攻击者可借 Host 注入把验证令牌引到自己的域名。生产务必设置。
+      # - SITE_URL=https://yourblog.com
+      # 未设 SITE_URL 时的回退白名单（逗号分隔，含端口）
+      # - ALLOWED_HOSTS=yourblog.com,www.yourblog.com
+      # IP 属地解析会常驻约 100MB 内存（geoip-lite 整库）。
+      # 512MB 限额的容器建议关闭；关闭后留言板不显示属地，其余功能不受影响。
+      # - ENABLE_GEOIP=false
       - NODE_OPTIONS=--max-old-space-size=96 --max-semi-space-size=8
     volumes:
       - ./data:/app/data

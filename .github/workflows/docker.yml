@@ -16,18 +16,34 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v7
+      - uses: docker/build-push-action@v6
         with:
           context: .
           push: true
+          # 生成来源证明，便于追溯镜像由哪次提交、哪个工作流产出
+          provenance: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+# 供应链加固（未完成，需人工补一步）
+# ------------------------------------
+# 当前仍使用可变 tag（@v4/@v3/@v6）。理想做法是固定到 commit SHA，
+# 这样即使上游 tag 被移动/劫持，也不会在具备 packages:write 的发布上下文里
+# 执行非预期代码。
+#
+# 未固定的原因：SHA 必须从上游仓库实际查得，不能凭记忆填写
+# （写错会让整个 workflow 直接失败）。
+# 补齐方法：逐个查询后替换上面的 @vN，并保留版本注释：
+#   gh api repos/actions/checkout/commits/v4 --jq .sha
+#   gh api repos/docker/login-action/commits/v3 --jq .sha
+#   gh api repos/docker/build-push-action/commits/v6 --jq .sha
+# 或使用 https://github.com/marketplace/actions/pin-github-actions 之类的工具自动改写。

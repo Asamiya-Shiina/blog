@@ -31,10 +31,35 @@ function readdirSafe(dir) {
 }
 
 // 从 dir 中找出未被 referenced 集合引用的文件；跳过 .tmp 与隐藏文件
+// 注意：.tmp 不在这里处理（见 sweepStaleTmp），避免误删正在写入的半成品
 function diffOrphans(dir, referenced) {
   return readdirSafe(dir).filter(
     name => !name.startsWith('.') && !name.endsWith('.tmp') && !referenced.has(name)
   );
+}
+
+// 清理陈旧的 .tmp 文件
+// 上传流程是「写 .tmp → rename → 提交 DB」，若进程在写完之后、rename 之前被杀，
+// 就会留下一个永远不会被引用的 .tmp。旧实现里 .tmp 被 diffOrphans 永久跳过，
+// 因此每次崩溃泄漏一个文件（≤200KB，但数量无上限）。
+// 这里按修改时间清理超过 1 小时的 .tmp：正在上传的文件绝不会这么旧。
+const TMP_MAX_AGE_MS = 60 * 60 * 1000;
+
+function sweepStaleTmp(dir) {
+  let removed = 0;
+  const now = Date.now();
+  for (const name of readdirSafe(dir)) {
+    if (!name.endsWith('.tmp')) continue;
+    const full = path.join(dir, name);
+    try {
+      const st = fs.statSync(full);
+      if (now - st.mtimeMs > TMP_MAX_AGE_MS) {
+        fs.unlinkSync(full);
+        removed += 1;
+      }
+    } catch { /* 文件已消失或不可读，跳过 */ }
+  }
+  return removed;
 }
 
 function unlinkOrphans(dir, orphans) {
@@ -57,9 +82,10 @@ function sweepOrphanAvatars() {
     const rows = db.prepare('SELECT avatar_filename FROM users WHERE avatar_filename IS NOT NULL').all();
     const referenced = new Set(rows.map(r => r.avatar_filename));
     const orphans = diffOrphans(AVATAR_DIR, referenced);
-    if (orphans.length === 0) return;
+    const staleTmp = sweepStaleTmp(AVATAR_DIR);
+    if (orphans.length === 0 && staleTmp === 0) return;
     const { removed, failed } = unlinkOrphans(AVATAR_DIR, orphans);
-    console.log(`[orphan-sweep] avatars: 清理 ${removed} 个，失败 ${failed} 个`);
+    console.log(`[orphan-sweep] avatars: 清理 ${removed} 个孤儿、${staleTmp} 个陈旧 .tmp，失败 ${failed} 个`);
   } catch (e) {
     console.warn('[orphan-sweep] avatars sweep failed:', e.message);
   }
@@ -71,9 +97,10 @@ function sweepOrphanMusic() {
     const rows = db.prepare('SELECT filename FROM music').all();
     const referenced = new Set(rows.map(r => r.filename));
     const orphans = diffOrphans(MUSIC_DIR, referenced);
-    if (orphans.length === 0) return;
+    const staleTmp = sweepStaleTmp(MUSIC_DIR);
+    if (orphans.length === 0 && staleTmp === 0) return;
     const { removed, failed } = unlinkOrphans(MUSIC_DIR, orphans);
-    console.log(`[orphan-sweep] music: 清理 ${removed} 个，失败 ${failed} 个`);
+    console.log(`[orphan-sweep] music: 清理 ${removed} 个孤儿、${staleTmp} 个陈旧 .tmp，失败 ${failed} 个`);
   } catch (e) {
     console.warn('[orphan-sweep] music sweep failed:', e.message);
   }

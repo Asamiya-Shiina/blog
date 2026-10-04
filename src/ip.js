@@ -9,11 +9,37 @@
 // 这里采用惰性加载：只有真正需要解析某个 IP 属地时才执行 require，
 // 避免博客启动时即占用约 100MB 内存
 // 对于自托管的小型博客，多数时刻并无留言，属地查询几乎不会触发
+//
+// 实测：require('geoip-lite') 后 RSS 增加约 101.7MB，且不会被回收。
+// 在 512MB 内存限额的容器里，这是一个可被单个公开请求（GET /api/messages）
+// 触发的内存跃升，因此提供 ENABLE_GEOIP 开关：
+//   ENABLE_GEOIP=false  （或 0/no/off）—— 关闭属地解析，formatLocation 恒定返回 ''
+//   未设置 / 其他值                      —— 保持原有行为（默认开启）
 let geoip;
+let geoipDisabled = false;
+
+// 是否禁用 GeoIP（读取一次环境变量并缓存）
+function isGeoipDisabled() {
+  const raw = String(process.env.ENABLE_GEOIP ?? '').trim().toLowerCase();
+  return raw === 'false' || raw === '0' || raw === 'no' || raw === 'off';
+}
+
 function loadGeoip() {
+  if (geoipDisabled) return null;
   if (geoip !== undefined) return geoip;
+  if (isGeoipDisabled()) {
+    geoip = null;
+    geoipDisabled = true;
+    console.log('[geoip] 已通过 ENABLE_GEOIP 关闭 IP 属地解析');
+    return geoip;
+  }
   try { geoip = require('geoip-lite') || null; } catch { geoip = null; }
   return geoip;
+}
+
+// 供后台/诊断查看当前是否启用
+function geoipEnabled() {
+  return !isGeoipDisabled();
 }
 
 // 从 Express req 抽取第一个 IPv4；纯 IPv6 时回退为完整 IPv6 字符串
@@ -61,4 +87,4 @@ function formatLocation(ip) {
   return country;
 }
 
-module.exports = { getClientIp, formatLocation };
+module.exports = { getClientIp, formatLocation, geoipEnabled };

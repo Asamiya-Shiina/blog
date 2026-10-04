@@ -1,8 +1,28 @@
+# 依赖与构建产物
 node_modules
-data
-.env
-.git
-.github
-*.log
 client/
 content/
+
+# 运行时数据与密钥（绝不进镜像）
+data
+.env
+.env.*
+*.log
+
+# 版本控制与 CI
+.git
+.github
+
+# 编辑器 / 工具本地配置（此前漏掉，会被 COPY . . 打进公开镜像）
+.idea
+.claude
+.vscode
+
+# 文档与仓库元数据（镜像内无用途）
+README.md
+SECURITY-AUDIT-CHECKLIST.md
+.gitignore
+docker-compose.yml
+docker-compose.override.yml
+Dockerfile
+.dockerignore
