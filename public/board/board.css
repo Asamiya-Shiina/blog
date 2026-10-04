@@ -140,6 +140,15 @@ textarea:focus {
   color: var(--fg);
 }
 
+/* —— 分页：加载更早的留言 —— */
+/* 留言列表改为分页（服务端默认一页 200 条顶层留言），
+   更早的内容按需加载，避免一次拉回整表并触发 geoip 全量加载 */
+.load-more-row {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 28px;
+}
+
 /* —— 留言元信息（头像 / 用户名 / 角色） —— */
 .meta {
   display: flex;

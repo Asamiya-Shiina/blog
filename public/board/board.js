@@ -16,6 +16,8 @@ function roleTagLabel(role) { return role === 'admin' ? '管理员' : role === '
 
 let me = null;       // 当前登录用户对象（未登录时为 null）
 let messages = [];   // 顶层留言，每项包含嵌套的 replies 数组
+let nextBefore = null;  // 分页游标：继续向前翻时传给 /api/messages?before=
+let hasMore = false;
 
 async function fetchMe() {
   try {
@@ -24,10 +26,25 @@ async function fetchMe() {
   } catch {}
 }
 
-async function fetchMessages() {
-  const r = await fetch('/api/messages');
+// 拉取一页留言
+// append=false：替换列表（首次加载 / 刷新，从最新一页开始）
+// append=true ：追加更早的一页（点击"加载更早的留言"）
+async function fetchMessages(append) {
+  let url = '/api/messages';
+  if (append && nextBefore) url += `?before=${encodeURIComponent(nextBefore)}`;
+  const r = await fetch(url, { credentials: 'same-origin' });
   const d = await r.json();
-  messages = d.messages || [];
+  const page = d.messages || [];
+  messages = append ? messages.concat(page) : page;
+  hasMore = !!d.has_more;
+  nextBefore = d.next_before || null;
+}
+
+// 同步"加载更多"按钮可见性
+function syncLoadMore() {
+  const btn = document.getElementById('load-more');
+  if (!btn) return;
+  btn.hidden = !hasMore;
 }
 
 function renderMessage(m, isChild) {
@@ -133,9 +150,32 @@ function render() {
 }
 
 async function reload() {
-  await fetchMessages();
+  // 重新从最新一页开始：nextBefore 必须归零，否则会带着旧游标去取更早的数据
+  nextBefore = null;
+  messages = [];
+  await fetchMessages(false);
   render();
+  syncLoadMore();
 }
+
+// 「加载更早的留言」：按当前游标追加下一页，不移除已显示的内容
+document.getElementById('load-more').addEventListener('click', async function () {
+  const btn = this;
+  if (!hasMore || !nextBefore) return;
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = '加载中…';
+  try {
+    await fetchMessages(true);   // 内部按 nextBefore 取更早的一页并更新游标
+    render();
+    syncLoadMore();
+  } catch {
+    // 失败时保持按钮可见，允许重试
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+});
 
 document.getElementById('composer-btn').addEventListener('click', async () => {
   const ta = document.getElementById('composer-text');
