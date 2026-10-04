@@ -21,3 +21,5 @@ client/dist/
 client/*.spec
 # JetBrains IDE
 .idea/
+# Claude Code 本地配置
+.claude/
