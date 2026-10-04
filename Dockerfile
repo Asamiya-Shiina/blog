@@ -6,7 +6,7 @@
 FROM node:24-slim AS build
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 # —— runtime：不带编译器，只保留运行依赖 ——

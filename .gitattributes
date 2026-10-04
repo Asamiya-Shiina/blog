@@ -1,0 +1,26 @@
+# 强制仓库内文本文件以 LF 换行
+# 解决 Windows 工具链把 CRLF 写进仓库的问题：
+#   在 checkout、commit、working tree 三个环节都按 * 文本 = LF 处理。
+# 同时声明 node_modules、data、产物目录为自动 LF 之外的豁免（避免污染二进制）。
+# docker-entrypoint.sh 必须是 LF（bash 跑不动 CRLF）。
+
+* text=auto eol=lf
+
+# 二进制豁免（任何二进制都不要触碰）
+*.png binary
+*.jpeg binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.mp3 binary
+*.wav binary
+*.ogg binary
+*.flac binary
+*.m4a binary
+*.aac binary
+
+# 仓库不应该出现的目录
+node_modules/** binary
+data/** binary
+client/dist/** binary
+client/build/** binary
