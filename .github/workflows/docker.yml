@@ -24,6 +24,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # 创建 docker-container driver 的 buildx builder。
+      # 必须：provenance/attestation 只支持 docker-container driver，
+      # runner 默认的 docker driver 会用不了（build 直接 fail）。
+      - uses: docker/setup-buildx-action@v3
+
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -45,5 +50,6 @@ jobs:
 # 补齐方法：逐个查询后替换上面的 @vN，并保留版本注释：
 #   gh api repos/actions/checkout/commits/v4 --jq .sha
 #   gh api repos/docker/login-action/commits/v3 --jq .sha
+#   gh api repos/docker/setup-buildx-action/commits/v3 --jq .sha
 #   gh api repos/docker/build-push-action/commits/v6 --jq .sha
 # 或使用 https://github.com/marketplace/actions/pin-github-actions 之类的工具自动改写。
