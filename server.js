@@ -68,6 +68,22 @@ app.use(express.urlencoded({ extended: false }));
 // 解析 Cookie，供 session 验证使用
 app.use(cookieParser());
 
+// 非 JSON 请求体的全局闸门
+// express.json 的 1MB 限制对 multipart 不生效，而上传路由虽然已改为 busboy 流式
+// 限流，仍在入口处再设一道：凡声明 Content-Length 且超过上限的请求直接拒绝，
+// 不进入任何解析器。这样即使将来新增 multipart 端点忘记设限也不会被利用。
+const MAX_UPLOAD_BYTES = 16 * 1024 * 1024;   // 需 ≥ 音乐上传上限 15MB
+app.use((req, res, next) => {
+  const ct = String(req.headers['content-type'] || '');
+  // JSON / 表单已被各自的 body-parser 限制覆盖，这里只管其余类型（multipart 等）
+  if (/application\/(json|urlencoded)|^application\/x-www-form-urlencoded/i.test(ct)) return next();
+  const len = parseInt(req.headers['content-length'] || '', 10);
+  if (Number.isFinite(len) && len > MAX_UPLOAD_BYTES) {
+    return res.status(413).json({ error: 'payload too large' });
+  }
+  next();
+});
+
 // 反向代理信任层数
 // 默认不信任任何 X-Forwarded-For（裸跑时防止客户端伪造 IP 绕过速率限制、污染留言属地）
 // 前面接入 Caddy / Nginx 时可通过环境变量开启
@@ -85,8 +101,10 @@ app.set('trust proxy', trustProxy);
 app.use((_req, res, next) => {
   // 禁止浏览器猜测 MIME 类型
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  // 禁止被嵌入 iframe（防点击劫持；CSP frame-ancestors 也会兜底）
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  // 禁止被嵌入 iframe（防点击劫持）
+  // 与 CSP 的 frame-ancestors 保持一致：都取最严格值 DENY。
+  // 旧值是 SAMEORIGIN，在不支持 CSP 的旧浏览器上允许同源嵌套，与 frame-ancestors 'none' 矛盾
+  res.setHeader('X-Frame-Options', 'DENY');
   // 控制 Referer 信息泄露
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   // 禁用摄像头、麦克风、地理位置等敏感浏览器 API
@@ -117,7 +135,9 @@ app.use((_req, res, next) => {
     "object-src 'none'; " +
     "base-uri 'none'; " +
     "form-action 'self'; " +
-    "frame-ancestors 'none'"
+    "frame-ancestors 'none'; " +
+    // 把站内残留的 http:// 子资源请求升级为 https，防止明文降级加载
+    "upgrade-insecure-requests"
   );
   // HSTS：强制浏览器在一年内使用 HTTPS 访问
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -151,37 +171,36 @@ const NOT_FOUND_HTML = `<!DOCTYPE html>
 </body></html>`;
 
 // 后台页面鉴权
-// /managers/* 下的所有 HTML 页面需要后台管理者（admin / moderator）登录
-// /managers/users（用户与角色管理）仅全局管理员（admin）可访问
+// /managers/* 下的所有 HTML 页面需要全局管理员（admin）登录
+// 注意：本函数作为中间件挂载在文末的静态资源段（见「静态文件托管」），
+// 而不是单独 app.use('/managers/', ...) —— 那样拦不住 express.static
 function requireAdminPage(req, res, next) {
   const token = req.cookies && req.cookies[COOKIE_NAME];
-  const session = verify(token);
-  if (session) {
-    const row = db.prepare('SELECT role, tokens_valid_after FROM users WHERE id = ?').get(session.userId);
-    if (row && session.iat >= (row.tokens_valid_after || 0) && row.role === 'admin') {
+  const pre = verify(token);
+  if (pre) {
+    const row = db.prepare('SELECT role, session_epoch FROM users WHERE id = ?').get(pre.userId);
+    // 必须把行记录传给 verify 才能校验会话世代号（吊销）
+    if (row && row.role === 'admin' && verify(token, row)) {
       return next();
     }
   }
-  // 其他情况一律 404（匿名、普通用户、moderator、session 无效统一抹掉入口）
-  // 静态资源扩展名也不再放行，避免匿名直接拉取 /managers/*.css 摸清后台结构
+  // 其他情况一律 404（匿名、普通用户、moderator、session 被吊销统一抹掉入口）
+  // 静态资源同样不再放行，避免匿名拉取 /managers/*.js 摸清后台结构与端点名
   return res.status(404).type('html').send(NOT_FOUND_HTML);
 }
-app.use('/managers/', requireAdminPage);
 
 // 个人主页页面鉴权
 // /me/* 任何已登录用户（含普通用户 user）均可访问，未登录跳 /login/
-// 与 requireAdminPage 行为一致：放行明确的静态资源扩展名，避免静态 JS / CSS 被守卫拦截
+// 与 requireAdminPage 一样，作为中间件挂在静态资源段上
 function requireLoginPage(req, res, next) {
   const token = req.cookies && req.cookies[COOKIE_NAME];
-  const session = verify(token);
-  if (session) {
-    const row = db.prepare('SELECT 1, tokens_valid_after FROM users WHERE id = ?').get(session.userId);
-    if (row && session.iat >= (row.tokens_valid_after || 0)) return next();
+  const pre = verify(token);
+  if (pre) {
+    const row = db.prepare('SELECT session_epoch FROM users WHERE id = ?').get(pre.userId);
+    if (row && verify(token, row)) return next();
   }
-  if (/\.(?:css|js|png|jpe?g|gif|svg|ico|woff2?|ttf|eot|map)$/i.test(req.path)) return next();
   return res.redirect('/login/');
 }
-app.use('/me/', requireLoginPage);
 
 // 健康检查端点（供 Docker HEALTHCHECK 使用）
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
@@ -280,6 +299,22 @@ app.get(['/posts/:slug', '/posts/:slug/'], (req, res) => {
 // 搜索页（无需登录，仅搜索已发布文章）
 // 全文 LIKE 查询会全表扫描，需要限流防止恶意请求
 
+// IP 归一化：作为内存 Map 的 key 使用前必须校验
+// 原因：开启 trust proxy 时 req.ip 来自 X-Forwarded-For，是完全可控的字符串
+// （长度上限为 Node 的 16KB 头部上限）。直接当 Map key 会让内存上限失去意义：
+// 1 万个 16KB 的 key ≈ 160MB。这里只接受合法 IP 字面量，非法值统一归一化。
+const IPV4_RE = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+const IPV6_RE = /^[0-9A-Fa-f:.]+$/;
+
+function normalizeIp(raw) {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  if (!s) return 'unknown';
+  if (s.length > 45) return 'unknown';          // IPv6 最长 45 字符
+  if (IPV4_RE.test(s)) return s;
+  if (s.includes(':') && IPV6_RE.test(s)) return s;
+  return 'unknown';                              // 非 IP 字面量一律折叠，避免 key 爆炸
+}
+
 // 搜索时间窗口：30 秒
 const SEARCH_WINDOW_MS = 30 * 1000;
 
@@ -343,11 +378,13 @@ function repeatSearchGuard(req, res, next) {
   if (lastSearch.size > 500) sweepLastSearch();
 
   const now = Date.now();
-  const prev = lastSearch.get(req.ip);
+  // 归一化后再作 key：req.ip 在 trust proxy 下可由客户端伪造且长度不受限
+  const ipKey = normalizeIp(req.ip);
+  const prev = lastSearch.get(ipKey);
   if (prev && prev.q === q && now - prev.at < SEARCH_WINDOW_MS) {
     return tooManySearches(res, '刚刚搜过同样的关键词了，换个词或者等三十秒再试。');
   }
-  lastSearch.set(req.ip, { q, at: now });
+  lastSearch.set(ipKey, { q, at: now });
   next();
 }
 
@@ -407,6 +444,29 @@ app.get(['/status', '/status/'], (_req, res) => {
 
 // 静态文件托管
 // public/ 目录下包含 login、setup、managers、me、register 等页面
+//
+// 安全说明：/managers 与 /me 的静态资源必须挂在自己的守卫之后。
+// 只写 app.use('/managers/', requireAdminPage) 是不够的——那是【路由级】中间件，
+// 而 express.static 会直接命中磁盘文件，导致 /managers/admin.js、users.js 等
+// 仍可被匿名拉取（泄露后台结构与端点名）。
+//
+// 编排说明：
+//   1. express.static 挂到【带斜杠】的挂载点（/managers/、/me/）时，
+//      req.url 会被剥离前缀，正好用于服务目录内的资源。
+//   2. 对目录路径（如 /me/）express.static 会调用 next() 而不是返回 404，
+//      若它注册在全局 static 之前就会"穿透"到下面把 me.js 之类放出去。
+//      因此这里额外用【不带斜杠】的挂载（/managers、/me）承接目录本身，
+//      由它提供 index.html，且同样走守卫。
+//   3. 顺序必须严于宽松：受保护的两个挂载 + 其目录入口，全部排在全局 static 之前。
+// 后台入口页面与资源：仅 admin（守卫对非 admin 返回 404，不暴露入口存在性）
+app.use('/managers/', requireAdminPage, express.static(path.join(__dirname, 'public', 'managers')));
+app.use('/managers', requireAdminPage, express.static(path.join(__dirname, 'public', 'managers')));
+// 个人主页：任何已登录用户（未登录由守卫重定向到 /login/）
+app.use('/me/', requireLoginPage, express.static(path.join(__dirname, 'public', 'me')));
+app.use('/me', requireLoginPage, express.static(path.join(__dirname, 'public', 'me')));
+
+// 公开静态资源（login / setup / register / board / site / index / verify）
+// 注意：本行【必须】在 /managers、/me 之后，否则会绕过上面的守卫
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 根级资源：首页、图片、音频（显式列出，避免暴露 data/、node_modules/）
@@ -416,11 +476,11 @@ app.use('/image', express.static(path.join(__dirname, 'image')));
 app.use('/audio', express.static(MUSIC_DIR));
 // 头像从 data/uploads/avatars 提供（与上传目录保持一致）
 app.use('/avatar', express.static(AVATAR_DIR));
-// 个人主页 / 开放注册页 / 留言板 / SMTP 管理单独入口（仅管理员可达）
-app.use('/me', express.static(path.join(__dirname, 'public', 'me')));
+// 开放注册页 / 留言板 / 邮箱验证页单独入口
 app.use('/register', express.static(path.join(__dirname, 'public', 'register')));
 app.use('/board', express.static(path.join(__dirname, 'public', 'board')));
-app.use('/managers/smtp', express.static(path.join(__dirname, 'public', 'managers', 'smtp')));
+// 邮箱验证页（公开）：令牌即凭证，页面本身不含敏感数据
+app.use('/verify', express.static(path.join(__dirname, 'public', 'verify')));
 
 // 兜底 404（所有路由未匹配时）
 app.use((_req, res) => {
@@ -440,6 +500,13 @@ app.use((err, _req, res, _next) => {
 });
 
 // 启动 HTTP 服务
-app.listen(PORT, () => {
+// 显式设置超时：默认值下（requestTimeout 300s、无连接上限）攻击者可以用
+// 极慢的请求体长期占用连接。配合 pids=100 的容器上限，几十个慢连接即可耗尽配额。
+const server = app.listen(PORT, () => {
   console.log(`blog server listening on http://localhost:${PORT}`);
 });
+server.requestTimeout = 60_000;    // 单个请求最长 60s（含上传，正常上传远低于此）
+server.headersTimeout = 15_000;    // 请求头最长 15s
+server.keepAliveTimeout = 65_000;  // 略高于反代常见的 60s，避免竞态断连
+// 单连接最多处理 1000 个请求后关闭，加速 keep-alive 连接的资源回收
+server.maxRequestsPerSocket = 1000;

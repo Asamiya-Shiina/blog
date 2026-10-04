@@ -9,10 +9,10 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('node:crypto');
-const { Readable } = require('node:stream');
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { requireAuth, requireManager } = require('../auth');
+const { parseMultipart } = require('../upload');
 
 const db = require('../db');
 
@@ -88,45 +88,58 @@ router.get('/', requireManager, (_req, res) => {
   });
 });
 
-// 上传歌曲（管理员）
-// Express req 是 Node.js Readable 流，与 Web Request.formData() 不直接兼容
-// 此处将 Node 流转换为 Web ReadableStream 并包装为 Request，使用 undici 解析 multipart
-router.post('/', requireManager, writeLimiter, async (req, res) => {
-  let form;
-  try {
-    // Node → Web 流转换后通过 Request 包装，由 undici 负责 multipart 解析
-    const webBody = Readable.toWeb(req);
-    const headers = {};
-    for (const [k, v] of Object.entries(req.headers)) {
-      headers[k] = Array.isArray(v) ? v.join(', ') : String(v);
-    }
-    const webReq = new Request('http://internal/upload', {
-      method: 'POST',
-      headers,
-      body: webBody,
-      duplex: 'half',
-    });
-    form = await webReq.formData();
-  } catch (e) {
-    console.warn('multipart parse failed:', e.message);
-    return res.status(400).json({ error: 'invalid multipart payload' });
-  }
+// 音频容器魔数校验
+// 与头像的 checkImageMagic 同理：客户端声明的 MIME 不可信，必须看文件真实字节，
+// 否则任意内容（ZIP/EXE/HTML）都能以 <uuid>.mp3 落盘并从 /audio/ 对外提供，
+// 把站点变成借站主域名的任意内容托管点。
+// 识别规则（取各容器首个可判定特征）：
+//   MP3   ID3 标签 "ID3"，或 MPEG 帧同步 FF Ex/Fx（如 FF FB / FF F3 / FF E3）
+//   WAV   "RIFF" .... "WAVE"
+//   OGG   "OggS"
+//   FLAC  "fLaC"
+//   M4A   .... "ftyp"（第 4-8 字节）
+//   AAC   ADTS 同步字 FF F1 / FF F9（MPEG-4/2，无 CRC/有 CRC）
+function checkAudioMagic(buf) {
+  const b = buf;
+  if (b.length < 4) return false;
+  // MP3: ID3v2 标签
+  if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) return true;
+  // MP3: MPEG 音频帧同步（11 位全 1）
+  if (b[0] === 0xFF && (b[1] & 0xE0) === 0xE0) return true;
+  // WAV: RIFF....WAVE
+  if (b.length >= 12 &&
+      b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+      b[8] === 0x57 && b[9] === 0x41 && b[10] === 0x56 && b[11] === 0x45) return true;
+  // OGG
+  if (b[0] === 0x4F && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return true;
+  // FLAC
+  if (b[0] === 0x66 && b[1] === 0x4C && b[2] === 0x61 && b[3] === 0x43) return true;
+  // M4A / MP4: 第 4-8 字节为 "ftyp"
+  if (b.length >= 8 &&
+      b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return true;
+  return false;
+}
 
-  const file = form.get('file');
-  if (!file || typeof file === 'string') {
-    return res.status(400).json({ error: 'file is required' });
-  }
-  const fileName = file.name || 'song';
-  const mime = (file.type || '').toLowerCase();
+// 上传歌曲（管理员）
+// 使用 busboy 流式解析：超出上限立即中断，不会把整个 body 缓冲进内存
+// （旧实现用 undici formData() 会先缓冲再校验，单个大请求即可打爆内存）
+router.post('/', requireManager, writeLimiter, async (req, res) => {
+  const parsed = await parseMultipart(req, { maxFileBytes: MAX_SIZE, maxFiles: 1, maxFields: 5 });
+  if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });
+
+  const file = parsed.file;
+  const fileName = file.filename || 'song';
+  const mime = file.mime;
   const ext = ALLOWED_MIME[mime];
   if (!ext) {
     return res.status(400).json({ error: `unsupported mime type: ${mime || '(unknown)'}` });
   }
+  const buf = file.buffer;
 
-  // 读取字节并执行最终大小校验
-  const buf = Buffer.from(await file.arrayBuffer());
-  if (buf.length === 0)           return res.status(400).json({ error: 'empty file' });
-  if (buf.length > MAX_SIZE)      return res.status(413).json({ error: `file too large (max ${MAX_SIZE / 1024 / 1024}MB)` });
+  // 魔数校验：声明类型必须与真实内容相符
+  if (!checkAudioMagic(buf)) {
+    return res.status(400).json({ error: 'file content does not match declared audio type' });
+  }
 
   // 磁盘文件名采用 UUID + 扩展名的形式，防止用户控制路径
   const storedName = crypto.randomUUID() + ext;
@@ -140,7 +153,7 @@ router.post('/', requireManager, writeLimiter, async (req, res) => {
   }
 
   // 标题：用户可显式指定；缺省时使用原始文件名去除扩展名
-  let title = String(form.get('title') || '').trim().slice(0, 200);
+  let title = String(parsed.fields.title || '').trim().slice(0, 200);
   if (!title) {
     title = String(fileName).replace(/\.[^.]+$/, '').slice(0, 200) || '未命名';
   }
