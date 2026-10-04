@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>邮箱验证</title>
+  <meta name="robots" content="noindex" />
+  <link rel="stylesheet" href="/site/site.css" />
+  <link rel="stylesheet" href="/site/site-pages.css" />
+</head>
+<body class="verify-page">
+  <main class="wrap">
+    <div class="card" id="card">
+      <div class="mark bad" id="mark">…</div>
+      <h1 id="heading">正在校验链接</h1>
+      <p id="message">请稍候。</p>
+
+      <!-- 设置密码表单：仅在令牌有效时显示 -->
+      <form id="verify-form" hidden novalidate>
+        <p class="hint">
+          账号「<span id="v-username"></span>」的邮箱已验证。
+          请设置你的登录密码（至少 10 位，含字母和数字）。
+        </p>
+        <label for="password">密码</label>
+        <input id="password" name="password" type="password" autocomplete="new-password"
+               minlength="10" maxlength="256" required />
+        <label for="confirm">确认密码</label>
+        <input id="confirm" name="confirm" type="password" autocomplete="new-password"
+               minlength="10" maxlength="256" required />
+        <p class="form-msg" id="form-msg" role="alert"></p>
+        <button type="submit" id="submit">设置密码并登录</button>
+      </form>
+
+      <div class="actions" id="actions" hidden>
+        <a class="btn btn-primary" id="action-primary" href="/login/">前往登录</a>
+        <a class="btn btn-ghost" href="/">← 返回首页</a>
+      </div>
+    </div>
+  </main>
+
+  <script src="/verify/verify.js"></script>
+</body>
+</html>

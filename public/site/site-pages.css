@@ -554,6 +554,71 @@ body.searched .player { animation: none; }
 }
 .verify-page .btn-ghost:hover { color: var(--fg); }
 
+/* 验证页的「设置密码」表单（邮箱验证通过后由本人设置密码） */
+.verify-page form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+  margin: 0 0 8px;
+}
+.verify-page label {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.verify-page input[type="password"],
+.verify-page input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 14px;
+  font-size: 14px;
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.verify-page input[type="password"]:focus,
+.verify-page input[type="text"]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+.verify-page form button {
+  margin-top: 14px;
+  padding: 11px 18px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+.verify-page form button:hover:not(:disabled) { background: #2563eb; }
+.verify-page form button:active:not(:disabled) { transform: scale(0.98); }
+.verify-page form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+/* 表单内的提示/错误行 */
+.verify-page .form-msg {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+  min-height: 18px;
+}
+.verify-page .form-msg.bad { color: #dc2626; }
+.verify-page .form-msg.ok { color: #16a34a; }
+.verify-page .hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 4px;
+  line-height: 1.5;
+}
+
 /* ========== 404 页面 ========== */
 
 .not-found-page {

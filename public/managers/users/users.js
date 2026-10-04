@@ -13,7 +13,7 @@
 
 (() => {
   // 从共用工具库 window.admin 解构所需函数
-  const { api, guard, escapeHtml, bindNav, hashPassword } = window.admin;
+  const { api, guard, escapeHtml, bindNav } = window.admin;
 
   // 两个视图区块：setup 引导表单与管理表格
   const setupView = document.getElementById('setup-view');
@@ -21,6 +21,19 @@
 
   // 角色中文标签
   const ROLE_LABEL = { admin: '全局管理员', moderator: '普通管理员', user: '普通用户' };
+
+  /**
+   * 前端侧新密码校验（服务端会再校验一次，这里只为即时反馈）
+   * 规则与服务端 validatePassword 保持一致：≥10 位、含字母与数字
+   * 注意：密码必须以明文提交给服务端，服务端才有能力执行强度校验
+   */
+  function validateNewPassword(pw) {
+    if (typeof pw !== 'string' || pw.length < 10) { alert('密码至少需要 10 个字符'); return false; }
+    if (pw.length > 256) { alert('密码过长'); return false; }
+    if (!/[a-zA-Z]/.test(pw)) { alert('密码必须包含字母'); return false; }
+    if (!/[0-9]/.test(pw)) { alert('密码必须包含数字'); return false; }
+    return true;
+  }
 
   /**
    * 页面初始化：
@@ -178,21 +191,20 @@
       if (isSelf) {
         const op = prompt('请输入当前密码');
         if (!op) return;
-        const np = prompt('请输入新密码（至少 8 位）');
+        const np = prompt('请输入新密码（至少 10 位，含字母和数字）');
         if (!np) return;
-        if (np.length < 8) { alert('密码至少 8 位'); return; }
-        // 同时传递明文与 SHA-256，服务端优先使用 hash
+        if (!validateNewPassword(np)) return;
+        // 新密码必须是明文：服务端需要明文才能校验强度
+        // （旧密码仍可传哈希，仅用于比对；这里直接传明文以简化）
         body = {
           old_password: op,
-          old_password_hash: await hashPassword(op),
           new_password: np,
-          new_password_hash: await hashPassword(np),
         };
       } else {
-        const np = prompt(`为「${name}」输入新密码（至少 8 位）`);
+        const np = prompt(`为「${name}」输入新密码（至少 10 位，含字母和数字）`);
         if (!np) return;
-        if (np.length < 8) { alert('密码至少 8 位'); return; }
-        body = { new_password: np, new_password_hash: await hashPassword(np) };
+        if (!validateNewPassword(np)) return;
+        body = { new_password: np };
       }
       try {
         await api('PATCH', '/api/users/' + id + '/password', body);
@@ -220,12 +232,10 @@
     const form = e.currentTarget;
     const fd = new FormData(form);
     try {
-      const pw = fd.get('password');
-      const password_hash = await hashPassword(pw);
+      // 密码必须以明文提交，服务端才能校验强度并哈希
       await api('POST', '/api/users', {
         username: fd.get('username'),
-        password: pw,
-        password_hash,
+        password: fd.get('password'),
       });
       form.reset();
       createCard.hidden = true;

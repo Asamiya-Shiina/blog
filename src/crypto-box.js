@@ -30,13 +30,43 @@ function encrypt(plain) {
   return Buffer.concat([iv, tag, ct]).toString('base64');
 }
 
+// 解密失败异常
+// 调用方必须显式处理，绝不能把密文当成明文继续使用
+class DecryptError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'DecryptError';
+  }
+}
+
+// 解密
+// 返回值语义：
+//   成功            -> 明文
+//   payload 为空    -> ''（未配置）
+//   密文但解不开    -> 抛 DecryptError（fail-closed）
+//
+// 设计说明（重要）：
+// 历史上本函数在解密失败时 return payload，把 base64 密文当作"密码"返回。
+// 这会造成静默故障：SESSION_SECRET 轮换后，getSmtpConfig() 仍认为配置完整，
+// 于是 needsVerify=true，所有注册都变成 pending 且邮件永远发不出去，
+// 15 分钟后被清理，而管理后台仍显示"已配置"。
+// 现在改为抛错，让上层明确拒绝服务并大声报错。
+//
+// 兼容历史明文：只对"明显不是本方案密文"的输入放行（base64 解码失败或长度不足）。
+// 长度足够的输入一律按密文处理——GCM 认证标签失败必须视为密钥错误，不得降级。
 function decrypt(payload) {
   if (!payload) return '';
-  // 兼容历史明文配置：base64 解码失败、长度不足或 GCM 校验失败时
-  // 原样返回，便于从明文平滑升级到密文
+
   let buf;
-  try { buf = Buffer.from(payload, 'base64'); } catch { return payload; }
+  try {
+    buf = Buffer.from(payload, 'base64');
+  } catch {
+    // 不是合法 base64：视为历史明文配置
+    return payload;
+  }
+  // 长度不足以容纳 iv(12) + authTag(16)：视为历史明文配置
   if (buf.length < 12 + 16) return payload;
+
   try {
     const iv = buf.subarray(0, 12);
     const tag = buf.subarray(12, 28);
@@ -45,8 +75,21 @@ function decrypt(payload) {
     decipher.setAuthTag(tag);
     const pt = Buffer.concat([decipher.update(ct), decipher.final()]);
     return pt.toString('utf8');
-  } catch {
-    return payload;
+  } catch (e) {
+    throw new DecryptError(
+      'SMTP 密码解密失败：加密密钥与写入时不一致（通常是 SESSION_SECRET 被轮换或改动）。' +
+      '请在后台重新填写 SMTP 密码以修复。'
+    );
+  }
+}
+
+// 尝试解密但不抛错，供只想知道"是否可用"的调用方使用
+// 返回 { ok: true, value } 或 { ok: false, reason }
+function tryDecrypt(payload) {
+  try {
+    return { ok: true, value: decrypt(payload) };
+  } catch (e) {
+    return { ok: false, reason: e.message };
   }
 }
 
@@ -58,4 +101,4 @@ function isEncrypted(payload) {
   return /^[A-Za-z0-9+/=]+$/.test(payload);
 }
 
-module.exports = { encrypt, decrypt, isEncrypted };
+module.exports = { encrypt, decrypt, tryDecrypt, isEncrypted, DecryptError };

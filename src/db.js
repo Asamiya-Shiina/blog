@@ -153,10 +153,25 @@ try {
 } catch (_) { /* 列已存在则忽略 */ }
 
 // 迁移 3：users 表添加 tokens_valid_after 列
-// 改密码 / 删用户时将该值更新为当前 epoch（秒），使所有更早签发的 session token 立即失效
-// 用于解决 session token 为无状态 HMAC、改密码后丢失的 token 仍可继续使用的问题
+// 历史方案：用秒级时间戳比较 token 的 iat，判断是否早于吊销点
+// 注意：该列已被 session_epoch 取代（见迁移 4），保留仅为兼容旧数据
 try {
   db.exec(`ALTER TABLE users ADD COLUMN tokens_valid_after INTEGER NOT NULL DEFAULT 0`);
+} catch (_) { /* 列已存在则忽略 */ }
+
+// 迁移 4：users 表添加 session_epoch 列
+//
+// 为什么需要它：用秒级时间戳（tokens_valid_after）判断"token 是否在吊销点之前签发"
+// 存在固有竞态——同一秒内先登出再登录时，新 token 的 iat 与吊销点无法区分先后，
+// 会导致新会话被误判为已吊销（表现为登出后同一秒内无法重新登录）。
+//
+// session_epoch 是一个单调递增的世代号：
+//   签发 token 时把当前 epoch 写进 token（纳入 MAC 签名范围）
+//   吊销时把 users.session_epoch + 1
+//   校验时要求 token.epoch === user.session_epoch，不等即失效
+// 世代号只增不减，不依赖任何时间精度，因此不存在竞态。
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0`);
 } catch (_) { /* 列已存在则忽略 */ }
 
 // 迁移 2：users 表结构升级（开放注册 + 个人主页）
@@ -264,7 +279,34 @@ function sweepExpiredPendingUsers() {
   return expired;
 }
 
+// 首次引导：原子地创建首个管理员
+//
+// 为什么必须原子：旧实现先查 userCount() 再 await bcrypt.hash()（约 250-400ms），
+// 然后才 INSERT。Express 单线程但异步，两个并发的 POST /api/setup 都能通过
+// 计数检查，各自插入一个 role='admin'，攻击者即可抢到全局管理员。
+//
+// 这里把「计数判断 + 插入」压进单条 INSERT ... SELECT ... WHERE，
+// better-sqlite3 是同步的，因此不存在交错窗口。
+// 返回 1=创建成功，0=已存在用户（调用方应回 409）。
+function createFirstAdminSync({ username, passwordHash }) {
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const info = db.prepare(`
+      INSERT INTO users (username, password_hash, role, hash_version, status)
+      SELECT ?, ?, 'admin', 2, 'active'
+      WHERE (SELECT COUNT(*) FROM users) = 0
+    `).run(username, passwordHash);
+    db.exec('COMMIT');
+    if (info.changes > 0) invalidateUserCount();
+    return info.changes;
+  } catch (e) {
+    try { db.exec('ROLLBACK'); } catch { /* 已回滚 */ }
+    throw e;
+  }
+}
+
 module.exports = db;
 module.exports.userCount = userCount;
 module.exports.invalidateUserCount = invalidateUserCount;
 module.exports.sweepExpiredPendingUsers = sweepExpiredPendingUsers;
+module.exports.createFirstAdminSync = createFirstAdminSync;

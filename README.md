@@ -21,14 +21,22 @@
 - 头像上传（带校验）、名字、签名
 
 **开放注册**（`/register`）
-- 滑块验证 + 邮箱验证（站点配置 SMTP 时启用；未配置则直接激活）
+- 滑块验证 + 邮箱验证（**必须配置 SMTP 才能注册**）
+- 注册时**不设置密码**：提交用户名 + 邮箱后收到验证邮件，点击链接进入 `/verify/` 页面
+  由**本人设置密码**并完成激活，随后自动登录
+- 这样即使他人用你的邮箱注册，也无法预置一个自己知道的密码（防账号预劫持）
 
 **安全**
-- HMAC-SHA256 Session（httpOnly + SameSite=Lax Cookie，1 年有效期；改密码 / 删用户自动吊销旧 token）
-- bcrypt 哈希（cost 12，前端先 SHA-256 解决 72 字节限制）
-- Zod 校验 + DOMPurify HTML 消毒
-- 登录 / 注册 / 写入 / 搜索 / Setup 全链路速率限制
-- CSP（script-src 'self'、style-src-attr 'none'）/ HSTS / nosniff / X-Frame-Options / Permissions-Policy
+- HMAC-SHA256 Session（httpOnly + SameSite=Lax Cookie，1 年有效期）
+- 会话吊销基于**单调递增的世代号**（`users.session_epoch`）：登出 / 改密码立即失效，
+  且不受秒级时间戳精度影响（改密码后其他设备全部掉线，本设备自动续签）
+- bcrypt 哈希（cost 12；服务端对明文做 SHA-256 以规避 72 字节限制）
+- **密码强度校验在服务端对明文执行**（≥10 位、含字母与数字、弱口令黑名单）——
+  设置密码的接口不接受预哈希值，否则强度规则会被恒定长度的哈希串无条件绕过
+- Zod 校验 + DOMPurify HTML 消毒（全站单一消毒入口，公开页与 API 行为一致）
+- 登录 / 注册 / 验证 / 写入 / 搜索 / Setup 全链路速率限制
+- **上传走 busboy 流式解析**：超限立即中断请求，不会把整个请求体缓冲进内存
+- CSP（script-src 'self'、style-src-attr 'none'、upgrade-insecure-requests）/ HSTS / nosniff / X-Frame-Options DENY / Permissions-Policy
 - 防用户名枚举、统一错误消息、关键操作审计日志
 - 不使用任何 inline `<script>` / `onclick` / `style` 属性——所有交互走外置脚本，所有样式走 CSS 类，符合 CSP
 
@@ -81,7 +89,9 @@ docker compose up -d
 
 首次访问 `http://localhost:3000` 会被引导到 `/setup/`，填写用户名和密码即可创建全局管理员账号。`SESSION_SECRET` 会在容器启动时自动生成并持久化到 `data/.session-secret`（重启容器不丢）。
 
-> ⚠️ 上面的 compose 仅适合本地测试。生产部署请参考下文的「HTTPS、反代与 IP」，前置 Nginx / Caddy 反代并设 `TRUST_PROXY=1`，避免 cookie 与验证链接在网络上走错地址。
+> ⚠️ **要开放注册必须先配置 SMTP**（后台 → SMTP）。注册流程要求邮箱验证，未配置 SMTP 时 `/api/register` 会明确返回 503 而不是静默放行。
+
+> ⚠️ 生产部署请参考下文的「HTTPS、反代与 IP」，前置 Nginx / Caddy 反代并设 `TRUST_PROXY=1` + `SITE_URL`，并把容器端口绑定到回环地址（compose 默认已是 `127.0.0.1:3000:3000`），避免 cookie 与验证链接在网络上走错地址、以及 `X-Forwarded-For` 被伪造绕过限流。
 
 ### 本地开发
 
@@ -104,13 +114,15 @@ npm start
 
 | 变量 | 必填 | 默认 | 说明 |
 |---|---|---|---|
-| `SESSION_SECRET` | Docker 自动生成 | — | Session 签名密钥；丢失会吊销所有已签发 token |
+| `SESSION_SECRET` | Docker 自动生成 | — | Session 签名密钥，同时用于派生 SMTP 密码的加密密钥；丢失会吊销所有已签发 token **并使已保存的 SMTP 密码无法解密** |
 | `PORT` | 否 | `3000` | 监听端口 |
 | `DB_PATH` | 否 | `./data/blog.sqlite` | SQLite 文件路径 |
 | `NODE_ENV` | 否 | — | `production` 时错误响应只输出消息 |
-| `TRUST_PROXY` | 否 | `false` | 反代层数（`true` / `false` / 数字 / `loopback`）；裸跑保持默认；前置 HTTPS 反代时设为 `1` |
+| `TRUST_PROXY` | 否 | `false` | 反代层数（`true` / `false` / 数字 / `loopback`）；前置 HTTPS 反代时设为 `1` |
 | `COOKIE_SECURE` | 否 | 按 `req.secure` | 控制 cookie 是否带 Secure；不显式设时由 `req.secure` 自动判断 |
-| `SITE_URL` | 否 | 自动 | 邮件验证链接用的站点根地址；生产设正式域名最稳（如 `https://yourblog.com`）。不设时自动跟随当前请求的协议 + Host（需反代 + `TRUST_PROXY=1`），否则回落 `http://localhost:$PORT` |
+| `SITE_URL` | **生产必填** | 自动 | 邮件验证链接用的站点根地址（如 `https://yourblog.com`）。**不设时邮件链接会回落到请求的 Host 头，而 Host 可被客户端伪造，攻击者可借此把验证令牌引到自己域名** |
+| `ALLOWED_HOSTS` | 否 | — | 未设 `SITE_URL` 时的 Host 白名单（逗号分隔，含端口）；不在白名单内则拒绝发信 |
+| `ENABLE_GEOIP` | 否 | 开启 | 设为 `false`/`0`/`no`/`off` 关闭 IP 属地解析。geoip-lite 整库常驻约 **100MB** 内存，512MB 限额的容器建议关闭（关闭后留言板不显示属地，其余不受影响） |
 
 ## HTTPS、反代与 IP
 
@@ -170,26 +182,27 @@ Caddy 的 `reverse_proxy` 默认已写入 `X-Forwarded-For` / `X-Forwarded-Proto
 ├── image/                          # 前台静态图片
 ├── src/
 │   ├── db.js                       # SQLite 初始化、建表、迁移
-│   ├── auth.js                     # Session 签发 / 校验、密码哈希、角色
+│   ├── auth.js                     # Session 签发 / 校验、会话世代号吊销、密码哈希、角色
 │   ├── audit.js                    # 审计日志（关键操作留痕 + 定期清理）
 │   ├── captcha.js                  # 滑块验证（轨迹防绕过）
-│   ├── crypto-box.js               # 对称加密（SMTP 密码落库）
-│   ├── ip.js                       # IP 抽取 + GeoIP 属地
-│   ├── mailer.js                   # SMTP 配置 + 邮件发送
+│   ├── crypto-box.js               # 对称加密（SMTP 密码落库，解密失败 fail-closed）
+│   ├── ip.js                       # IP 抽取 + GeoIP 属地（支持 ENABLE_GEOIP 关闭）
+│   ├── mailer.js                   # SMTP 配置 + 邮件发送（含 Host 白名单校验）
+│   ├── upload.js                   # busboy 流式 multipart 解析（带上限，防内存放大）
 │   ├── status-store.js             # 实时状态内存存储 + SSE 广播
 │   ├── routes/
-│   │   ├── auth.js                 # 登录、注册、用户管理、首次设置
+│   │   ├── auth.js                 # 登录、注册、邮箱验证、用户管理、首次设置
 │   │   ├── posts.js                # 文章 CRUD
 │   │   ├── music.js                # 音乐管理 + 当前播放
 │   │   ├── status.js               # 状态上报 / 配置 / SSE
 │   │   ├── stats.js                # 访问统计
 │   │   ├── categories.js           # 分类管理
-│   │   └── messages.js             # 留言板
+│   │   └── messages.js             # 留言板（分页）
 │   └── views/                      # 服务端渲染（无模板引擎，原生字符串拼接）
-│       ├── posts.js
+│       ├── posts.js                # 含全站唯一的 Markdown 消毒入口
 │       └── status-page.js
 ├── public/
-│   ├── login/    setup/    register/    me/    board/
+│   ├── login/    setup/    register/    verify/    me/    board/
 │   ├── managers/                        # 后台管理面板（含 smtp 子页）
 │   └── site/                            # 前台公共样式与脚本
 ├── client/                             # Windows 状态上报客户端（PyInstaller 打包为 exe）
