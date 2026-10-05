@@ -578,6 +578,14 @@ class StatusGUI:
         self.update_tray_icon()
 
     def do_logout(self):
+        # 先调用服务端 /api/logout，让服务端会话立刻失效；
+        # 仅清本地状态会留下 1 年有效的 sid（MAX_AGE_SECONDS=365天），登出语义不彻底
+        # 用宽 except 兜底：网络断开时不应阻塞本地退出流程
+        if getattr(self.client, "logged_in", False):
+            try:
+                self.client.http.request("POST", "/api/logout")
+            except Exception as e:
+                print(f"[logout] server logout failed (continuing): {e}")
         self.client.logged_in = False
         self.client.enabled = True
         self.client.saved_config["password"] = ""

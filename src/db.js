@@ -179,35 +179,40 @@ try {
 // SQLite 修改 CHECK 约束需重建表，检测到缺 email 列时执行一次性重建
 const userCols = db.pragma('table_info(users)').map(c => c.name);
 if (!userCols.includes('email')) {
+  // 审计 H4：FK 关闭必须用 try/finally 兜底，否则中途抛错将永久残留 OFF 状态
+  // 后续所有 FK 约束（comments.post_id 等）都会被静默禁用
   db.exec(`PRAGMA foreign_keys = OFF`);
-  db.transaction(() => {
-    db.exec(`
-      ALTER TABLE users RENAME TO users_old;
-      CREATE TABLE users (
-        id             INTEGER PRIMARY KEY AUTOINCREMENT,
-        username       TEXT NOT NULL UNIQUE,
-        password_hash  TEXT NOT NULL,
-        role           TEXT NOT NULL DEFAULT 'user'
-                         CHECK (role IN ('admin','moderator','user')),
-        email          TEXT UNIQUE,
-        status         TEXT NOT NULL DEFAULT 'active'
-                         CHECK (status IN ('active','pending')),
-        verify_token   TEXT,
-        verify_expires TEXT,
-        name           TEXT,
-        bio            TEXT,
-        avatar_filename TEXT,
-        hash_version   INTEGER NOT NULL DEFAULT 1,
-        created_at     TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
-      );
-      INSERT INTO users (id, username, password_hash, role, hash_version, created_at)
-        SELECT id, username, password_hash, role, hash_version, created_at FROM users_old;
-      DROP TABLE users_old;
-      CREATE INDEX idx_users_username ON users(username);
-      CREATE INDEX idx_users_email ON users(email);
-    `);
-  })();
-  db.exec(`PRAGMA foreign_keys = ON`);
+  try {
+    db.transaction(() => {
+      db.exec(`
+        ALTER TABLE users RENAME TO users_old;
+        CREATE TABLE users (
+          id             INTEGER PRIMARY KEY AUTOINCREMENT,
+          username       TEXT NOT NULL UNIQUE,
+          password_hash  TEXT NOT NULL,
+          role           TEXT NOT NULL DEFAULT 'user'
+                           CHECK (role IN ('admin','moderator','user')),
+          email          TEXT UNIQUE,
+          status         TEXT NOT NULL DEFAULT 'active'
+                           CHECK (status IN ('active','pending')),
+          verify_token   TEXT,
+          verify_expires TEXT,
+          name           TEXT,
+          bio            TEXT,
+          avatar_filename TEXT,
+          hash_version   INTEGER NOT NULL DEFAULT 1,
+          created_at     TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+        );
+        INSERT INTO users (id, username, password_hash, role, hash_version, created_at)
+          SELECT id, username, password_hash, role, hash_version, created_at FROM users_old;
+        DROP TABLE users_old;
+        CREATE INDEX idx_users_username ON users(username);
+        CREATE INDEX idx_users_email ON users(email);
+      `);
+    })();
+  } finally {
+    db.exec(`PRAGMA foreign_keys = ON`);
+  }
   // 注意：此处不要调用 invalidateUserCount()
   // 该函数会引用下方 let 声明的 _userCountCache，而迁移代码位于其声明之前，
   // 在冷启动（旧库缺 email 列）的路径上会触发 TDZ 异常。

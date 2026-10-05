@@ -10,7 +10,7 @@
 
 
 const express = require('express');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const { z } = require('zod');
 const { requireAuth, requireManager } = require('../auth');
 const db = require('../db');
@@ -117,7 +117,21 @@ router.get('/', (req, res) => {
 // 通过限制最大并发连接数防止资源耗尽
 const MAX_SSE_CLIENTS = 50;
 
-router.get('/stream', (req, res) => {
+// 审计 H5：SSE 端点设计为公开（未登录用户拿到 'anonymous' 占位），
+// 不变其公开性，但加 IP 维度的新建连接限流，防止单 IP 通过频繁重连打满 50 个槽位。
+// 长连接本身不计速（限的是"创建连接"那一刻），对正常重连基本无影响。
+const sseConnectLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,    // 5 分钟窗口
+  max: 10,                     // 每 IP 最多新建 10 次
+  standardHeaders: true,
+  legacyHeaders: false,
+  // 审计 H5：调用 ipKeyGenerator helper 让 IPv6 地址也能被正确归类，
+  // 否则 express-rate-limit v8 会在启动时抛 ERR_ERL_KEY_GEN_IPV6
+  keyGenerator: (req) => ipKeyGenerator(req),
+  message: { error: 'too many stream connections' },
+});
+
+router.get('/stream', sseConnectLimiter, (req, res) => {
   if (store.clientCount >= MAX_SSE_CLIENTS) {
     // 告诉浏览器等待 60s 后再重试，避免连接打满后所有客户端同时重连
     res.setHeader('Retry-After', '60');
@@ -158,10 +172,59 @@ const configSchema = z.object({
   titleAppPatterns: z.array(z.object({ pattern: z.string().max(200) })).optional(),
 });
 
+// 审计 H10：admin 配置里的正则模式由 admin 控制但客户端每次上报都会跑（ReDoS）。
+// 服务端必须在保存时校验：
+//   1. 模式数量上限（防 N 个模式叠加放大耗时）
+//   2. 每个模式必须能编译（防无效 regex 让客户端崩）
+//   3. 编译产物的 backreference 计数过大则拒绝（粗略防灾难性回溯；想做严格超时需换 re2 库）
+const MAX_PATTERNS_PER_KIND = 50;
+const MAX_REGEX_BACKREFS = 4;     // 回溯引用超过此数即视为可疑
+
+function countBackrefs(pattern) {
+  // 计算未转义 \N 出现次数（粗略估计）。转义反斜杠后再扫描 \\ 跳过
+  let count = 0;
+  for (let i = 0; i < pattern.length; i++) {
+    if (pattern[i] === '\\' && i + 1 < pattern.length) {
+      if (pattern[i + 1] === '\\') { i++; continue; }
+      count++;
+    }
+  }
+  return count;
+}
+
+function validateRegexPatterns(value, kind) {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  if (value.length > MAX_PATTERNS_PER_KIND) {
+    return `${kind}: too many patterns (max ${MAX_PATTERNS_PER_KIND}, got ${value.length})`;
+  }
+  for (let i = 0; i < value.length; i++) {
+    const p = value[i];
+    const pat = typeof p === 'string' ? p : (p && typeof p.pattern === 'string' ? p.pattern : null);
+    if (pat === null) continue;
+    if (countBackrefs(pat) > MAX_REGEX_BACKREFS) {
+      return `${kind}[${i}]: too many backreferences (max ${MAX_REGEX_BACKREFS})`;
+    }
+    try {
+      new RegExp(pat);
+    } catch (e) {
+      const msg = e && e.message ? String(e.message).slice(0, 100) : 'unknown';
+      return `${kind}[${i}]: invalid regex: ${msg}`;
+    }
+  }
+  return null;
+}
+
 router.post('/admin/config', requireManager, (req, res) => {
   const parsed = configSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid config' });
+  }
+  // 正则模式校验（防 ReDoS + 无效 regex）
+  for (const key of ['blacklistPatterns', 'appNamePatterns', 'titleAppPatterns']) {
+    if (parsed.data[key] !== undefined) {
+      const err = validateRegexPatterns(parsed.data[key], key);
+      if (err) return res.status(400).json({ error: err });
+    }
   }
   for (const [key, value] of Object.entries(parsed.data)) {
     setConfig(key, value);

@@ -16,15 +16,38 @@ const MIN_X = 20;
 const MAX_X = WIDTH - SLIDER_W - 20;
 
 // 拖动轨迹（反脚本）校验参数
-// 仅比对最终坐标很容易被脚本绕过：攻击者只需读取 targetX 再原样提交即可
-// 这里要求客户端上报一段完整拖动轨迹（时间递增的位置采样），校验其符合
-// 人类拖拽特征（样本数、持续时长、单调推进、终点落入缺口），
-// 将破解门槛从「一行 curl」抬至「至少仿真一段逼真轨迹」
-const MIN_SAMPLES = 4;         // 至少需要多少个采样点
-const MIN_DURATION_MS = 350;   // 拖拽最短持续时间（毫秒）；脚本无法瞬时完成
-const MAX_DURATION_MS = 8000;  // 最长持续时间，防止拖拽过久刷 token
-const MAX_BACK_JUMP = 90;      // 允许的轻微回拽幅度（真实手指难免出现抖动）
-const END_TOLERANCE = TOLERANCE; // 轨迹终点也须落在缺口容差内
+//
+// ⚠️ 根本局限：本 captcha 把 targetX 返回给前端是设计如此（前端要据此绘制缺口），
+// 攻击者一定知道 targetX，因此服务端无法靠"算法保密"防止伪造。
+// 这里的轨迹校验只能抬高伪造门槛（让脚本必须仿真逼真轨迹），
+// 真正的兜底是注册端点的 IP 限流（5/min，见 src/routes/auth.js）。
+//
+// 历史漏洞（已修复）：早期 MIN_SAMPLES=4 + 无前进量校验时，攻击者可提交
+//   track = [(0,0),(0,100),(0,200),(targetX,350)]
+// 直接通过——曲线整体没动，只在最后瞬移到 targetX。
+// 修复后新增累计前进量、单段位移上限与速度范围约束，
+// 把"瞬移式绕过"变成必须伪造一条看起来像人类的曲线。
+
+const MIN_SAMPLES = 6;                  // 提高到 6，伪造更长轨迹更费力
+const MIN_DURATION_MS = 500;            // 拖拽最短持续时间（毫秒）
+const MAX_DURATION_MS = 8000;           // 最长持续时间，防止拖拽过久刷 token
+const MAX_BACK_JUMP = 90;               // 允许的轻微回拽幅度（真实手指难免抖动）
+const END_TOLERANCE = TOLERANCE;        // 轨迹终点须落在缺口容差内
+
+// 新增：单段位移/间隔上限（防"按帧瞬时采样后跳跃到 targetX"）
+const MAX_SINGLE_DELTA = 60;            // 单段位移上限（px）。真实手指在 ~100ms 内位移 < 60
+const MAX_SINGLE_INTERVAL_MS = 250;     // 单段时间间隔上限。> 250ms 多半是停顿或采样器失活
+
+// 新增：累计前进量校验（核心修复）
+const MIN_FORWARD_PROGRESS_RATIO = 0.6; // Σ正向dx 必须 ≥ targetX × 0.6，否则视为"原地不动+终点瞬移"
+
+// 新增：平均速度区间（防恒速线性插值脚本 / 防瞬移）
+const MIN_MEAN_VELOCITY = 8;            // px/sec，过慢视为故意拖延
+const MAX_MEAN_VELOCITY = 400;          // px/sec，过快视为瞬移
+
+// 新增：速度方差下限（防"匀速直线"）
+// 真实人类有加速-减速曲线（开始慢、中间快、末端再慢），最低与最高速度差应 > 阈值
+const MIN_VELOCITY_RANGE = 15;          // 速度最大值-最小值 ≥ 15 px/sec 才像人
 
 const store = new Map();       // token -> { targetX, ip, expiresAt }
 
@@ -50,8 +73,12 @@ function create(req) {
 // targetX 为缺口在 captcha 坐标系下的目标坐标（与 create 返回给前端的一致）
 function playsHuman(track, targetX) {
   if (!Array.isArray(track) || track.length < MIN_SAMPLES) return false;
+
+  // 格式校验 + 累计正向位移 + 单段约束
   let lastX = null;
   let lastT = null;
+  let forwardProgress = 0;
+  const velocities = [];
   for (const p of track) {
     if (!p || typeof p !== 'object') return false;
     const x = Number(p.x);
@@ -59,14 +86,39 @@ function playsHuman(track, targetX) {
     if (!Number.isFinite(x) || !Number.isFinite(t)) return false;
     if (x < 0 || x > WIDTH) return false;
     if (lastX !== null) {
-      if (t <= lastT) return false;                 // 时间必须严格递增
-      if (x < lastX - MAX_BACK_JUMP) return false;  // 大幅回退视为脚本跳步
+      const dt = t - lastT;
+      if (dt <= 0) return false;                          // 时间必须严格递增
+      if (dt > MAX_SINGLE_INTERVAL_MS) return false;      // 单段间隔过长视为采样器失活
+      const dx = x - lastX;
+      if (Math.abs(dx) > MAX_SINGLE_DELTA) return false;  // 单段瞬移拒绝
+      if (dx < -MAX_BACK_JUMP) return false;              // 大幅回退视为脚本跳步
+      if (dx > 0) forwardProgress += dx;
+      velocities.push((dx * 1000) / dt);                  // 记录本段速度（px/sec，可正可负）
     }
     lastX = x;
     lastT = t;
   }
+
   const duration = lastT - track[0].t;
   if (duration < MIN_DURATION_MS || duration > MAX_DURATION_MS) return false;
+
+  // 累计前进量：必须实际向前推进至少 targetX × 0.6（防"原地不动+终点瞬移到 targetX"）
+  if (forwardProgress < targetX * MIN_FORWARD_PROGRESS_RATIO) return false;
+
+  // 平均速度区间（基于累计前进量，避免被"原速回拽"稀释）
+  const meanVel = (forwardProgress * 1000) / duration;
+  if (meanVel < MIN_MEAN_VELOCITY || meanVel > MAX_MEAN_VELOCITY) return false;
+
+  // 速度方差下限：真实人类有加速-减速曲线，恒速视为脚本（防御"线性插值"绕过）
+  if (velocities.length >= 3) {
+    let vMin = Infinity, vMax = -Infinity;
+    for (const v of velocities) {
+      if (v < vMin) vMin = v;
+      if (v > vMax) vMax = v;
+    }
+    if (vMax - vMin < MIN_VELOCITY_RANGE) return false;
+  }
+
   if (Math.abs(lastX - targetX) > END_TOLERANCE) return false;
   return true;
 }

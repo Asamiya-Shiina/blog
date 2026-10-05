@@ -488,13 +488,16 @@ app.use((_req, res) => {
 });
 
 // 全局错误处理
-// 开发环境输出完整错误对象（含堆栈），生产环境仅输出消息
+// 始终记录完整错误（含堆栈）到 stderr —— 仅依据 NODE_ENV 切换日志详细度不可靠，
+// 默认未设置时与开发同行为。设 DEBUG=false 时仅记一行 message，避免极简部署被
+// console 输出口径覆盖。响应体始终仅返回通用消息，绝不泄露内部细节。
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
-  if (process.env.NODE_ENV !== 'production') {
-    console.error(err);
-  } else {
+  const minimal = String(process.env.DEBUG || '').toLowerCase() === 'false';
+  if (minimal) {
     console.error(err.message || err);
+  } else {
+    console.error(err);
   }
   res.status(err.status || 500).json({ error: 'internal error' });
 });

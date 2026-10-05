@@ -5,8 +5,16 @@
 
 (() => {
   async function sha256(password) {
+    // crypto.subtle（SubtleCrypto）只在「安全上下文」存在：HTTPS、localhost、127.0.0.1。
+    // 内网 / NAS 用 http://<局域网IP>:3000 访问时它是 undefined，直接调用会抛
+    // TypeError 并被下方的 catch 吞成"网络错误"，导致登录彻底不可用
+    //（明文回退分支在 fetch 之前就被异常跳过了）。
+    // 此处返回空串，让调用点的 `password_hash ? … : …` 三元真正回退为明文提交，
+    // 服务端的 login 路由本来就同时接受 password 与 password_hash。
+    // 注意：HTTP 下链路本身已无加密，回退为明文不降低实际安全性。
+    if (!globalThis.crypto || !globalThis.crypto.subtle) return '';
     const data = new TextEncoder().encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', data);
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
@@ -112,11 +120,14 @@
       btn.disabled = true;
       btn.textContent = '创建中…';
       try {
-        const password_hash = await sha256(password);
+        // /api/setup 只接受明文 password（服务端做强度校验 → SHA-256 → bcrypt），
+        // 不接受 password_hash（见 src/routes/auth.js 的 userCreateSchema）。
+        // 这里与 /setup/ 页面保持一致的明文提交，否则在 crypto.subtle 可用的环境下
+        // 会因字段不匹配拿到 400 invalid request。
         const res = await fetch('/api/setup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(password_hash ? { username, password_hash } : { username, password }),
+          body: JSON.stringify({ username, password }),
         });
         if (res.status === 201) {
           window.location.href = '/managers/';

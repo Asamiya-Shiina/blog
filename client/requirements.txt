@@ -1,0 +1,8 @@
+# 状态上报桌面客户端的 Python 依赖
+# 使用方法：pip install -r client/requirements.txt
+#
+# 版本约束策略：requests 必须 >= 2.32（含 CVE-2024-35195 修复），
+# 其余钉到 PyInstaller 打包时实测过的次要版本，避免 upstream breaking change。
+requests>=2.32.0,<3.0
+pystray>=0.19.5,<0.20
+Pillow>=10.0.0,<12.0

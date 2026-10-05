@@ -630,7 +630,10 @@ router.patch('/users/:id/password', requireAuth, passwordChangeLimiter, async (r
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid request' });
   }
-  // 自己改自己时必须验证旧密码
+  // 验证旧密码的两类场景：
+  // 1) 自己改自己 —— 必须提供旧密码（防在线爆破）
+  // 2) 管理员改其他管理员的密码 —— 管理员必须自验当前会话的活度
+  //    （防被劫持的 admin session 静默重置同 admin 的密码，绕开 session 令牌泄漏）
   if (id === req.user.id) {
     const user = getUserByUsername(req.user.username);
     if (!user) return res.status(403).json({ error: 'incorrect password' });
@@ -639,6 +642,17 @@ router.patch('/users/:id/password', requireAuth, passwordChangeLimiter, async (r
       password_hash: parsed.data.old_password_hash,
     }, user);
     if (!result.ok) return res.status(403).json({ error: 'incorrect password' });
+  } else if (req.user.role === 'admin') {
+    const target = db.prepare('SELECT role FROM users WHERE id = ?').get(id);
+    if (target && target.role === 'admin') {
+      const self = getUserByUsername(req.user.username);
+      if (!self) return res.status(403).json({ error: 'incorrect password' });
+      const result = await verifyPassword({
+        password: parsed.data.old_password,
+        password_hash: parsed.data.old_password_hash,
+      }, self);
+      if (!result.ok) return res.status(403).json({ error: 'incorrect password' });
+    }
   }
   const newPw = parsed.data.new_password;
   const pwErr = validatePassword(newPw);

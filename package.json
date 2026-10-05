@@ -7,6 +7,9 @@
     "start": "node server.js",
     "dev": "node --watch-path=./src --watch-path=server.js server.js"
   },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",

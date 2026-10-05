@@ -9,18 +9,50 @@ const bcrypt = require('bcrypt');
 
 // Session Secret 校验
 // 该密钥用于签发与验证 session token（HMAC-SHA256）
-// 必须在 .env 中设置，且不能是占位符或长度不足
+// 必须在 .env 中设置，且不能是占位符、长度不足或熵过低
 const SECRET = process.env.SESSION_SECRET;
 if (!SECRET) {
   console.error('SESSION_SECRET is not set in .env');
   process.exit(1);
 }
-if (SECRET === 'change-me-to-a-random-string') {
-  console.error('SESSION_SECRET is still the default placeholder — set a real secret in .env');
+// 常见占位符 / 低熵弱密钥集合 —— 历史漏洞（已修复）：
+// 早期只检测字面 "change-me-to-a-random-string"，其他常见弱密钥（如 "secret"、
+// "password123"、32 个空格、全 'a' 等）能蒙混过关，攻击者只需读 .env 即拿到 MAC 密钥。
+const WEAK_SECRETS = new Set([
+  'change-me-to-a-random-string',
+  'changeme',
+  'secret',
+  'password',
+  'admin',
+  'default',
+  'development',
+  'production',
+  'test',
+  '12345678901234567890123456789012',
+  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  '                                ', // 32 spaces
+]);
+if (WEAK_SECRETS.has(SECRET)) {
+  console.error('SESSION_SECRET is a known weak value — set a real secret in .env');
   process.exit(1);
 }
 if (SECRET.length < 32) {
   console.error('SESSION_SECRET is too short (minimum 32 characters)');
+  process.exit(1);
+}
+// 熵校验：拒绝全相同字符或单一字符重复的模式
+// 用游程编码检测最长相同字符连续段；超过总长 50% 视为低熵
+let maxRun = 1, curRun = 1;
+for (let i = 1; i < SECRET.length; i++) {
+  if (SECRET[i] === SECRET[i - 1]) {
+    curRun += 1;
+    if (curRun > maxRun) maxRun = curRun;
+  } else {
+    curRun = 1;
+  }
+}
+if (maxRun >= SECRET.length * 0.5) {
+  console.error('SESSION_SECRET has too little entropy (single character repeats)');
   process.exit(1);
 }
 
@@ -312,7 +344,12 @@ function optionalAuth(req, _res, next) {
     if (user && verify(token, user)) {
       req.user = user;
     }
-  } catch { /* 静默失败，不影响公开访问 */ }
+  } catch (e) {
+    // 审计 H2：公开访问不能被异常阻断，但要让运维能看到会话解析失败
+    // （DB 错误、token 异常等），便于排查
+    const msg = e && e.message ? String(e.message).slice(0, 200) : 'unknown';
+    console.warn('[optionalAuth] session parse failed:', msg);
+  }
   next();
 }
 

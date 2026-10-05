@@ -112,11 +112,13 @@
    *
    * 服务端采用 bcrypt(sha256(明文), 12) 方案，要求客户端先做一次 SHA-256
    * 这样网络传输的始终是 64 位十六进制哈希，避免明文密码泄露
-   * 失败时返回 rejected Promise，由调用方决定如何处理
+   * crypto.subtle 只在安全上下文（HTTPS / localhost）存在，HTTP 内网访问时为
+   * undefined；此时返回空串，由调用方回退为明文提交（服务端同样接受明文）。
    */
   async function hashPassword(password) {
+    if (!globalThis.crypto || !globalThis.crypto.subtle) return '';
     const data = new TextEncoder().encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', data);
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 

@@ -8,23 +8,25 @@
 - 首页（`/`）：个人介绍、技能树、联系方式
 - 文章列表 / 详情 / 搜索 / 分类归档（服务端渲染，Markdown + GFM）
 - 实时状态页（`/status`）：SSE 推送，多设备实时显示当前窗口
-- 留言板（`/board`）：嵌套回复、头像、IP 属地（完整 IP 仅管理员可见）
+- 留言板（`/board`）：回复、头像、IP 属地（完整 IP 仅管理员可见；回复会被压平到顶层，UI 上不会无限嵌套）
 - 可拖拽音乐播放器（管理员可在后台切歌）
 
 **后台**（`/managers/`，仅全局管理员 `admin` 可达）
-- 仪表盘、文章 CRUD（含分栏 Markdown 实时预览）、分类管理
+- 仪表盘（含今日 UV）、文章 CRUD（含分栏 Markdown 实时预览）、分类管理
 - 用户与角色管理、SMTP 配置、音乐管理、实时状态配置（黑名单 / 应用名映射 / 标题规则）
 
 > 管理接口（`/api/*`）对 admin / moderator 开放；但后台 HTML 面板入口已收紧为仅 `admin`。
 
 **个人主页**（`/me/`，任意已登录用户）
-- 头像上传（带校验）、名字、签名
+- 头像上传（**仅 JPG，≤200KB**，服务端 magic-byte 校验）、名字、签名
 
 **开放注册**（`/register`）
 - 滑块验证 + 邮箱验证（**必须配置 SMTP 才能注册**）
 - 注册时**不设置密码**：提交用户名 + 邮箱后收到验证邮件，点击链接进入 `/verify/` 页面
   由**本人设置密码**并完成激活，随后自动登录
 - 这样即使他人用你的邮箱注册，也无法预置一个自己知道的密码（防账号预劫持）
+- **邮箱域名白名单**：仅允许 Gmail / Outlook / Yahoo / QQ / 163 / Sina / Sohu / Foxmail / 139 / 阿里云
+  等主流个人邮箱；企业邮箱与一次性域名直接 422 拒绝（白名单见 `src/email-policy.js`）
 
 **安全**
 - HMAC-SHA256 Session（httpOnly + SameSite=Lax Cookie，1 年有效期）
@@ -39,6 +41,21 @@
 - CSP（script-src 'self'、style-src-attr 'none'、upgrade-insecure-requests）/ HSTS / nosniff / X-Frame-Options DENY / Permissions-Policy
 - 防用户名枚举、统一错误消息、关键操作审计日志
 - 不使用任何 inline `<script>` / `onclick` / `style` 属性——所有交互走外置脚本，所有样式走 CSS 类，符合 CSP
+
+**Windows 状态上报客户端**（`client/`，可选独立组件）
+
+`client/status_client.py` 是 Python 3 + Tkinter 写的 Windows 托盘应用，
+通过 `client/状态客户端.spec` 用 PyInstaller 单文件打包成 `状态客户端.exe`。
+用户配置服务器地址、账号密码后，每 5 秒把当前前台窗口 / 进程名 / 窗口标题 / 设备名
+上报到 `/api/data`，博客前台 `/status` 即可看到。
+
+- 单实例：使用 Windows 命名互斥锁 `BlogStatusClientMutex`，第二个进程立即退出
+- 闲置检测：5 分钟无键盘 / 鼠标动作自动置为「休息中」
+- 黑名单 / 应用名映射 / 标题规则：与后台「实时状态配置」共用同一份规则
+- 自我过滤：跳过 `python.exe` / `状态客户端.exe` 自身
+- 配置（服务器 / 账号 / 密码 / 设备名）写入 EXE 旁的 `client_config.json`
+
+> 客户端只在账号为**全局管理员 `admin`** 时启用；moderator / 普通用户的客户端登录会被自动登出。
 
 ## 角色权限
 
@@ -60,9 +77,11 @@
 | 认证 | HMAC-SHA256 + bcrypt |
 | 校验 / 消毒 | Zod + DOMPurify |
 | Markdown | marked |
-| 邮件 | nodemailer（nodemailer + 加密落库的 SMTP 配置） |
-| 定位 | geoip-lite（进程内 GeoIP，留言板属地） |
+| 邮件 | nodemailer（加密落库的 SMTP 配置，AES-256-GCM + scrypt 派生密钥） |
+| 上传 | busboy（流式 multipart，超限立即断流） |
+| 定位 | geoip-lite（惰性加载，留言板属地） |
 | 前端 | 原生 HTML/CSS/JS，无构建步骤 |
+| 桌面客户端 | Python 3 + Tkinter + pystray → PyInstaller |
 | 部署 | Docker（read-only + gosu 降权） → ghcr.io |
 
 ## 快速开始
@@ -109,6 +128,22 @@ npm start
 ```
 
 访问 `http://localhost:3000`。
+
+### 状态上报客户端（可选，需 Windows）
+
+```bash
+cd client
+pip install requests pywin32 pystray pillow
+
+# 直接以源码运行（用于调试）
+python status_client.py
+
+# 打包为单文件 exe（产物在 client/dist/状态客户端.exe）
+pyinstaller "状态客户端.spec"
+```
+
+> 客户端只在账号为**全局管理员 `admin`** 时启用；moderator / 普通用户的客户端登录会被自动登出。
+> 配置（服务器 / 账号 / 密码 / 设备名）写入 EXE 旁的 `client_config.json`。
 
 ## 环境变量
 
@@ -178,18 +213,22 @@ Caddy 的 `reverse_proxy` 默认已写入 `X-Forwarded-For` / `X-Forwarded-Proto
 ```
 ├── server.js                       # Express 入口（中间件、路由、监听）
 ├── docker-entrypoint.sh            # 容器入口：权限修复 + 密钥管理 + gosu 降权
-├── index.html                      # 首页
+├── Dockerfile                      # 多阶段构建（node:24-slim，gosu 降权 + 非 root）
+├── docker-compose.yml              # read-only + tmpfs + 512M 内存限额
 ├── image/                          # 前台静态图片
 ├── src/
-│   ├── db.js                       # SQLite 初始化、建表、迁移
+│   ├── db.js                       # SQLite 初始化、建表、迁移（hash_version / session_epoch）
 │   ├── auth.js                     # Session 签发 / 校验、会话世代号吊销、密码哈希、角色
 │   ├── audit.js                    # 审计日志（关键操作留痕 + 定期清理）
 │   ├── captcha.js                  # 滑块验证（轨迹防绕过）
 │   ├── crypto-box.js               # 对称加密（SMTP 密码落库，解密失败 fail-closed）
-│   ├── ip.js                       # IP 抽取 + GeoIP 属地（支持 ENABLE_GEOIP 关闭）
+│   ├── email-policy.js             # 注册邮箱域名白名单
+│   ├── ip.js                       # IP 抽取 + GeoIP 属地（惰性加载，支持 ENABLE_GEOIP 关闭）
 │   ├── mailer.js                   # SMTP 配置 + 邮件发送（含 Host 白名单校验）
 │   ├── upload.js                   # busboy 流式 multipart 解析（带上限，防内存放大）
 │   ├── status-store.js             # 实时状态内存存储 + SSE 广播
+│   ├── avatar-sweep.js             # 24h 周期：孤儿头像 / 音乐清理 + WAL checkpoint
+│   ├── db-sweep.js                 # 6h 周期：page_views 30d 清理 + 过期 pending 用户清理
 │   ├── routes/
 │   │   ├── auth.js                 # 登录、注册、邮箱验证、用户管理、首次设置
 │   │   ├── posts.js                # 文章 CRUD
@@ -197,18 +236,19 @@ Caddy 的 `reverse_proxy` 默认已写入 `X-Forwarded-For` / `X-Forwarded-Proto
 │   │   ├── status.js               # 状态上报 / 配置 / SSE
 │   │   ├── stats.js                # 访问统计
 │   │   ├── categories.js           # 分类管理
-│   │   └── messages.js             # 留言板（分页）
+│   │   └── messages.js             # 留言板（cursor 分页 + 属地）
 │   └── views/                      # 服务端渲染（无模板引擎，原生字符串拼接）
 │       ├── posts.js                # 含全站唯一的 Markdown 消毒入口
 │       └── status-page.js
 ├── public/
+│   ├── index/                      # 首页（/）
 │   ├── login/    setup/    register/    verify/    me/    board/
-│   ├── managers/                        # 后台管理面板（含 smtp 子页）
-│   └── site/                            # 前台公共样式与脚本
-├── client/                             # Windows 状态上报客户端（PyInstaller 打包为 exe）
-│   ├── status_client.py
-│   └── 状态客户端.spec
-└── data/                               # 运行时数据（volume 挂载）
+│   ├── managers/                   # 后台管理面板（含 categories / editor / music / posts / smtp / status / users）
+│   └── site/                       # 前台公共样式与脚本
+├── client/                         # Windows 状态上报客户端（PyInstaller 打包为 exe）
+│   ├── status_client.py            # 单实例托盘 + 5 秒窗口采样 + idle 检测
+│   └── 状态客户端.spec             # PyInstaller 配置（单文件、UPX 压缩）
+└── data/                           # 运行时数据（volume 挂载）
     ├── blog.sqlite
     ├── .session-secret
     └── uploads/{music,avatars}/
@@ -224,6 +264,8 @@ Caddy 的 `reverse_proxy` 默认已写入 `X-Forwarded-For` / `X-Forwarded-Proto
 ## CI/CD
 
 推送 `main` 后，GitHub Actions 自动构建镜像并推送到 `ghcr.io/asamiya-shiina/blog`，标签 `latest` 与 commit SHA。
+
+> ⚠️ `.github/workflows/docker.yml` 当前用 `actions/checkout@v4`、`docker/login-action@v3` 等**可变的 `@vN` tag**，未做 commit SHA 固定。生产自托管前请用 `gh api repos/<action>/commits/<tag> --jq .sha` 或 `pin-github-actions` 工具把 action 锁到具体 SHA，避免上游 tag 被恶意重写（SLSA 供应链加固）。
 
 ## License
 

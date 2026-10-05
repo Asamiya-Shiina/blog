@@ -81,7 +81,12 @@ function parseMultipart(req, options = {}) {
       // 关键：必须在任何操作之前挂上 error 监听，
       // 否则提前销毁该子流会触发未处理的 'error' 事件并终止进程
       fileStreams.add(stream);
-      stream.on('error', () => { /* 由 fail/close 路径统一处理，这里只保证不崩 */ });
+      stream.on('error', (err) => {
+        // 审计 H6：至少记日志，让运维能看到流式上传中的瞬时错误
+        // 真正的清理/响应仍由 fail()/close() 路径负责
+        const msg = err && err.message ? String(err.message).slice(0, 200) : 'unknown';
+        console.warn('[upload] file stream error:', msg);
+      });
 
       fileCount += 1;
       if (fileCount > limits.maxFiles) {

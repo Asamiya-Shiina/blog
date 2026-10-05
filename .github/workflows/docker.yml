@@ -16,9 +16,11 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/login-action@v3
+      # 供应链加固：所有 actions 用 commit SHA 固定（不用 @vN mutable tag），
+      # 即使上游 tag 被劫持/移动也只在具备 packages:write 的发布上下文里跑预期代码。
+      # 更新方法：gh api repos/<repo>/git/refs/tags/<ref> --jq .object.sha
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -27,29 +29,13 @@ jobs:
       # 创建 docker-container driver 的 buildx builder。
       # 必须：provenance/attestation 只支持 docker-container driver，
       # runner 默认的 docker driver 会用不了（build 直接 fail）。
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/build-push-action@v6
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           push: true
-          # 生成来源证明，便于追溯镜像由哪次提交、哪个工作流产出
+          # 生成来源证明，便于追溯镜像由哪次提交、哪个 workflow 产出
           provenance: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-
-# 供应链加固（未完成，需人工补一步）
-# ------------------------------------
-# 当前仍使用可变 tag（@v4/@v3/@v6）。理想做法是固定到 commit SHA，
-# 这样即使上游 tag 被移动/劫持，也不会在具备 packages:write 的发布上下文里
-# 执行非预期代码。
-#
-# 未固定的原因：SHA 必须从上游仓库实际查得，不能凭记忆填写
-# （写错会让整个 workflow 直接失败）。
-# 补齐方法：逐个查询后替换上面的 @vN，并保留版本注释：
-#   gh api repos/actions/checkout/commits/v4 --jq .sha
-#   gh api repos/docker/login-action/commits/v3 --jq .sha
-#   gh api repos/docker/setup-buildx-action/commits/v3 --jq .sha
-#   gh api repos/docker/build-push-action/commits/v6 --jq .sha
-# 或使用 https://github.com/marketplace/actions/pin-github-actions 之类的工具自动改写。

@@ -19,11 +19,23 @@ marked.setOptions({ gfm: true, breaks: true });
 // 一旦放宽 CSP 或把 content_html 渲染到 CSP 之外（RSS/邮件/原生客户端）即成 UI 伪装。
 // 现在两处共用本函数，配置不可能再分叉。
 //
-// FORBID_ATTR: ['style'] —— DOMPurify 默认保留内联样式，会允许 CSS 注入
-// （外带请求或涂改页面外观），显式禁用更稳妥。
+// 三层防御：
+// 1. FORBID_ATTR: ['style'] —— 禁止内联 style 属性（防 CSS 注入/UI 伪装）
+// 2. FORBID_TAGS —— 禁止携带代码执行/外带数据/嵌入子文档的标签
+//    （iframe/form/object/embed/meta/link/base/frame/frameset/input/button/textarea/select/style）
+// 3. ALLOW_DATA_ATTR: false —— 禁止 data-* 属性（防 base64 payload + Mutation XSS 兜底）
 function sanitizeMarkdown(md) {
   const raw = marked.parse(md || '');
-  return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true }, FORBID_ATTR: ['style'] });
+  return DOMPurify.sanitize(raw, {
+    USE_PROFILES: { html: true },
+    FORBID_ATTR: ['style'],
+    FORBID_TAGS: [
+      'style', 'iframe', 'form', 'object', 'embed',
+      'meta', 'link', 'base', 'frame', 'frameset',
+      'input', 'button', 'textarea', 'select', 'option',
+    ],
+    ALLOW_DATA_ATTR: false,
+  });
 }
 
 // HTML 实体转义：用于非 Markdown 的用户输入（如标题、摘要），防止 XSS

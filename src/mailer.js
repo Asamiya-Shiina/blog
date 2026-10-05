@@ -49,12 +49,18 @@ function getSmtpConfig() {
 //   ② ALLOWED_HOSTS 白名单内的请求 Host（本地开发 / 多域名场景）
 //   ③ localhost 兜底
 // 返回 { url, trusted }：trusted=false 表示 url 不可信，调用方应拒绝发信
-const ALLOWED_HOSTS = new Set(
-  String(process.env.ALLOWED_HOSTS || '')
-    .split(',')
-    .map(s => s.trim().toLowerCase())
-    .filter(Boolean)
-);
+//
+// 审计 H7：原实现把 ALLOWED_HOSTS 在模块加载时一次性求值，
+// 运维在进程内改 env（如 dotenv 重载）不会生效。
+// 改为每次调用重新解析 env，env 变动即时生效（仍然 O(n)，n=白名单长度，足够便宜）。
+function getAllowedHosts() {
+  return new Set(
+    String(process.env.ALLOWED_HOSTS || '')
+      .split(',')
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
 
 function baseUrl(req) {
   const hint = process.env.SITE_URL;
@@ -62,6 +68,7 @@ function baseUrl(req) {
 
   if (req && req.get) {
     const host = (req.get('host') || '').toLowerCase();
+    const ALLOWED_HOSTS = getAllowedHosts();   // 每次重新解析，env 改动即时生效
     if (host && ALLOWED_HOSTS.has(host)) {
       return { url: `${req.protocol || 'http'}://${host}`.replace(/\/$/, ''), trusted: true };
     }
