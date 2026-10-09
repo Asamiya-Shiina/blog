@@ -9,31 +9,42 @@
 //
 // 调度（与 src/audit.js:58-62 一致）：
 //   - 模块加载时立即执行一次
-//   - setInterval(24h) + .unref()
+//   - setTimeout 链式调度，每 24h 一次 + unref()
 //   - 任一清理失败仅 console.warn，不影响后续 sweep
 //
+// 文件 IO 改异步：原实现用 fs.statSync / fs.unlinkSync / fs.readdirSync，
+// 单次 sweep 期间会阻塞事件循环几百毫秒（孤儿文件多时）。
+// 改为 fs.promises.* 后，每次 stat/unlink 之间的 await 让出事件循环，
+// 24h 一次的 sweep 不会卡住 HTTP 路径。
 // 由 server.js require() 触发加载，无独立 CLI 入口。
 
 const path = require('node:path');
 const fs = require('node:fs');
+const fsp = fs.promises;
 const db = require('./db');
 
 const AVATAR_DIR = path.join(__dirname, '..', 'data', 'uploads', 'avatars');
 const MUSIC_DIR  = path.join(__dirname, '..', 'data', 'uploads', 'music');
 const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 小时
 
-function readdirSafe(dir) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-    return [];
+// 异步 readdir：目录不存在时建一个再返回空
+async function readdirSafe(dir) {
+  try {
+    return await fsp.readdir(dir);
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      await fsp.mkdir(dir, { recursive: true });
+      return [];
+    }
+    throw e;
   }
-  return fs.readdirSync(dir);
 }
 
 // 从 dir 中找出未被 referenced 集合引用的文件；跳过 .tmp 与隐藏文件
 // 注意：.tmp 不在这里处理（见 sweepStaleTmp），避免误删正在写入的半成品
-function diffOrphans(dir, referenced) {
-  return readdirSafe(dir).filter(
+async function diffOrphans(dir, referenced) {
+  const names = await readdirSafe(dir);
+  return names.filter(
     name => !name.startsWith('.') && !name.endsWith('.tmp') && !referenced.has(name)
   );
 }
@@ -45,16 +56,17 @@ function diffOrphans(dir, referenced) {
 // 这里按修改时间清理超过 1 小时的 .tmp：正在上传的文件绝不会这么旧。
 const TMP_MAX_AGE_MS = 60 * 60 * 1000;
 
-function sweepStaleTmp(dir) {
+async function sweepStaleTmp(dir) {
   let removed = 0;
   const now = Date.now();
-  for (const name of readdirSafe(dir)) {
+  const names = await readdirSafe(dir);
+  for (const name of names) {
     if (!name.endsWith('.tmp')) continue;
     const full = path.join(dir, name);
     try {
-      const st = fs.statSync(full);
+      const st = await fsp.stat(full);
       if (now - st.mtimeMs > TMP_MAX_AGE_MS) {
-        fs.unlinkSync(full);
+        await fsp.unlink(full);
         removed += 1;
       }
     } catch { /* 文件已消失或不可读，跳过 */ }
@@ -62,11 +74,11 @@ function sweepStaleTmp(dir) {
   return removed;
 }
 
-function unlinkOrphans(dir, orphans) {
+async function unlinkOrphans(dir, orphans) {
   let removed = 0, failed = 0;
   for (const name of orphans) {
     try {
-      fs.unlinkSync(path.join(dir, name));
+      await fsp.unlink(path.join(dir, name));
       removed++;
     } catch (e) {
       console.warn(`[orphan-sweep] 删除失败 ${dir}/${name}: ${e.message}`);
@@ -77,14 +89,16 @@ function unlinkOrphans(dir, orphans) {
 }
 
 // 头像孤儿清理
-function sweepOrphanAvatars() {
+async function sweepOrphanAvatars() {
   try {
     const rows = db.prepare('SELECT avatar_filename FROM users WHERE avatar_filename IS NOT NULL').all();
     const referenced = new Set(rows.map(r => r.avatar_filename));
-    const orphans = diffOrphans(AVATAR_DIR, referenced);
-    const staleTmp = sweepStaleTmp(AVATAR_DIR);
+    const [orphans, staleTmp] = await Promise.all([
+      diffOrphans(AVATAR_DIR, referenced),
+      sweepStaleTmp(AVATAR_DIR),
+    ]);
     if (orphans.length === 0 && staleTmp === 0) return;
-    const { removed, failed } = unlinkOrphans(AVATAR_DIR, orphans);
+    const { removed, failed } = await unlinkOrphans(AVATAR_DIR, orphans);
     console.log(`[orphan-sweep] avatars: 清理 ${removed} 个孤儿、${staleTmp} 个陈旧 .tmp，失败 ${failed} 个`);
   } catch (e) {
     console.warn('[orphan-sweep] avatars sweep failed:', e.message);
@@ -92,14 +106,16 @@ function sweepOrphanAvatars() {
 }
 
 // 音乐孤儿清理
-function sweepOrphanMusic() {
+async function sweepOrphanMusic() {
   try {
     const rows = db.prepare('SELECT filename FROM music').all();
     const referenced = new Set(rows.map(r => r.filename));
-    const orphans = diffOrphans(MUSIC_DIR, referenced);
-    const staleTmp = sweepStaleTmp(MUSIC_DIR);
+    const [orphans, staleTmp] = await Promise.all([
+      diffOrphans(MUSIC_DIR, referenced),
+      sweepStaleTmp(MUSIC_DIR),
+    ]);
     if (orphans.length === 0 && staleTmp === 0) return;
-    const { removed, failed } = unlinkOrphans(MUSIC_DIR, orphans);
+    const { removed, failed } = await unlinkOrphans(MUSIC_DIR, orphans);
     console.log(`[orphan-sweep] music: 清理 ${removed} 个孤儿、${staleTmp} 个陈旧 .tmp，失败 ${failed} 个`);
   } catch (e) {
     console.warn('[orphan-sweep] music sweep failed:', e.message);
@@ -110,6 +126,7 @@ function sweepOrphanMusic() {
 // TRUNCATE 模式：将 wal 内容写回主数据库文件后截断 -wal，并把 -shm 标记为可清理
 // 常见失败原因：其他进程持锁（本项目为单进程，正常情况下不应出现）/ 磁盘已满
 // 失败仅 warn，不影响其他清理任务
+// 保持同步：pragma 是同步的，单次操作通常 < 5ms，没必要为它改 async
 function walCheckpoint() {
   try {
     // better-sqlite3 pragma 返回 [busy, log_pages, checkpointed_pages]
@@ -124,14 +141,22 @@ function walCheckpoint() {
   }
 }
 
-function runAll() {
-  sweepOrphanAvatars();
-  sweepOrphanMusic();
+async function runAll() {
+  // 头像与音乐清理互不依赖，并行触发（IO 异步时不阻塞对方）
+  await Promise.all([sweepOrphanAvatars(), sweepOrphanMusic()]);
   walCheckpoint();
 }
 
-const timer = setInterval(runAll, SWEEP_INTERVAL_MS);
-timer.unref();
+// 调度：setInterval 对 async 函数的返回值（Promise）会忽略，
+// 改用 setTimeout 链式调度，并在每次完成后 unref 不阻塞进程退出。
+function schedule() {
+  runAll()
+    .catch(e => console.warn('[orphan-sweep] runAll failed:', e.message))
+    .finally(() => {
+      const t = setTimeout(schedule, SWEEP_INTERVAL_MS);
+      t.unref();
+    });
+}
 
 // 启动后立即执行一次
-runAll();
+schedule();

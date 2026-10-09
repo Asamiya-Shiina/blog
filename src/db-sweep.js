@@ -31,18 +31,36 @@ const deleteOldestPageViewsStmt = db.prepare(
   'DELETE FROM page_views WHERE id IN (SELECT id FROM page_views ORDER BY viewed_at ASC LIMIT ?)'
 );
 
-function sweepPageViews() {
+// 分批删除上限：单批 5000 行，足以让单次 sweep 把事件循环压在 5-15ms 以内。
+// 即使 10 万行要分 20 批消化，批次间通过 setImmediate 让出事件循环，
+// HTTP / SSE 推送可以插入，避免 sweep 期间整站停顿。
+const DELETE_BATCH_SIZE = 5000;
+
+async function sweepPageViews() {
   try {
     deleteByAgeStmt.run(`-${RETAIN_DAYS} days`);
-    const n = countPageViewsStmt.get().n;
-    if (n > HARD_CAP) deleteOldestPageViewsStmt.run(n - SOFT_CAP);
+    let n = countPageViewsStmt.get().n;
+    if (n <= HARD_CAP) return;
+    let remaining = n - SOFT_CAP;
+    let deleted = 0;
+    while (remaining > 0) {
+      const batch = Math.min(DELETE_BATCH_SIZE, remaining);
+      const info = deleteOldestPageViewsStmt.run(batch);
+      deleted += info.changes;
+      remaining -= batch;
+      // 让出事件循环：单批 5-15ms 后插入一次 microtask，让其它 HTTP/SSE 处理
+      await new Promise(resolve => setImmediate(resolve));
+    }
+    if (deleted > 0) {
+      console.log(`[db-sweep] page_views: 分批删除 ${deleted} 行（${DELETE_BATCH_SIZE}/批）`);
+    }
   } catch (e) {
     console.warn('[db-sweep] page_views sweep failed:', e.message);
   }
 }
 
 // pending users 清理
-function sweepPendingUsers() {
+async function sweepPendingUsers() {
   try {
     const removed = db.sweepExpiredPendingUsers();
     if (removed.length > 0) {
@@ -53,13 +71,21 @@ function sweepPendingUsers() {
   }
 }
 
-function runAll() {
-  sweepPageViews();
-  sweepPendingUsers();
+async function runAll() {
+  await sweepPageViews();
+  await sweepPendingUsers();
 }
 
-const timer = setInterval(runAll, SWEEP_INTERVAL_MS);
-timer.unref();
+// 调度：setInterval 对 async 函数的返回值（Promise）会忽略，
+// 改用 setTimeout 链式调度，并在每次完成后 unref 不阻塞进程退出。
+function schedule() {
+  runAll()
+    .catch(e => console.warn('[db-sweep] runAll failed:', e.message))
+    .finally(() => {
+      const t = setTimeout(schedule, SWEEP_INTERVAL_MS);
+      t.unref();
+    });
+}
 
 // 启动后立即执行一次
-runAll();
+schedule();
