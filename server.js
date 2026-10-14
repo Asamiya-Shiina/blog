@@ -50,6 +50,9 @@ const { renderListPage, renderPostPage, renderSearchPage, renderNoticePage, rend
 const { renderStatusPage } = require('./src/views/status-page');
 
 const app = express();
+// 不暴露技术栈：X-Powered-By 默认会让每个响应自报「Express」，
+// 属于信息收集辅助项，直接关掉（纯减法，不影响任何功能）
+app.disable('x-powered-by');
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
 // 首次引导守卫
