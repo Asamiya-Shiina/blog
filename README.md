@@ -42,7 +42,7 @@
 
 **防御**
 - Zod 输入校验 + DOMPurify HTML 消毒（全站唯一消毒入口）
-- 全链路速率限制（登录 5 次 /15min，注册 5 次 /hr，搜索 10 次 /30s，写操作 30 次 /15min 等）
+- 全链路速率限制（登录 5 次 /15min，注册 5 次 /hr 按邮箱 + 30 次 /15min 按 IP，搜索 10 次 /30s，写操作 30 次 /15min 等）
 - 上传走 busboy 流式解析：超限立即断流，不缓冲整个请求体
 - CSP（禁止内联脚本、内联样式、`data:` 以外的所有外部资源）
 - HMAC 密钥强度校验（拒绝占位符 / 低熵 / 重复字符）
@@ -255,7 +255,7 @@ Caddy 的 `reverse_proxy` 默认已写入所需头部，`TRUST_PROXY=1` 直接�
 
 推送 `main` 后，GitHub Actions 自动构建镜像并推送到 `ghcr.io/asamiya-shiina/blog`。
 
-> ⚠️ workflow 当前使用可变的 `@vN` action tag，未固定到具体 SHA。生产自托管建议用 `gh api` 或 `pin-github-actions` 工具锁定，避免上游 tag 被恶意重写。
+> ✅ workflow 全部 4 个 action（checkout / login-action / setup-buildx-action / build-push-action）均已固定到 commit SHA 并以 `# vN` 注释保留版本号，上游 tag 被恶意重写不影响构建。升级时用 `pin-github-actions` 同步即可。
 
 ---
 
