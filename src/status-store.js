@@ -7,7 +7,9 @@
 // 超时阈值：45 秒无更新视为离线
 const STALE_TIMEOUT_MS = 45_000;
 
-// 设备状态存储：Map<deviceId, { active, app, title, icon, updatedAt }>
+// 设备状态存储：Map<`username\0deviceName`,
+//   { username, deviceName, active, app, title, icon, updatedAt }>
+// 归属信息（username/deviceName）为记录的一等字段，key 仅保证唯一性
 const devices = new Map();
 
 // 设备条目硬上限
@@ -22,6 +24,16 @@ const MAX_DEVICES_PER_USER = 10;
 // SSE 客户端连接池（Set 自动去重）
 const sseClients = new Set();
 
+// 设备 key：`username + NUL + deviceName`
+// 旧实现用 `${username}_${deviceName}` 拼接再 lastIndexOf('_') 切回来，
+// 而 username 与 deviceName 都允许下划线 → 切分必然串号，且配额前缀匹配可被
+// “deviceName 换前缀”绕过、跨用户误驱逐。现改为记录结构化字段（见下），
+// key 只负责唯一性：username 不含 NUL（auth 正则白名单），前段永远无歧义，
+// deviceName 内容任意（含 NUL/下划线）也不会影响归属判断。
+function deviceKey(username, deviceName) {
+  return username + '\u0000' + deviceName;
+}
+
 // 清理过期设备：超过 STALE_TIMEOUT_MS 未更新的设备将被移除
 function cleanStaleDevices() {
   const now = Date.now();
@@ -32,22 +44,13 @@ function cleanStaleDevices() {
   }
 }
 
-// 统计某个用户名当前占用的设备数（deviceId 格式 `${username}_${deviceName}`）
-function countUserDevices(username) {
-  const prefix = username + '_';
-  let n = 0;
-  for (const id of devices.keys()) {
-    if (id.startsWith(prefix)) n += 1;
-  }
-  return n;
-}
-
 // 驱逐某用户最旧的设备条目，直到低于上限
+// 按记录上的 username 字段精确匹配（旧实现的前缀匹配会把 alice_bob 算进 alice，
+// 也会被 deviceName 换前缀切出的假“用户桶”绕过）
 function evictUserDevices(username, keepAtMost) {
-  const prefix = username + '_';
   const owned = [];
   for (const [id, d] of devices) {
-    if (id.startsWith(prefix)) owned.push([id, d.updatedAt]);
+    if (d.username === username) owned.push([id, d.updatedAt]);
   }
   if (owned.length <= keepAtMost) return;
   owned.sort((a, b) => a[1] - b[1]);   // 最旧在前
@@ -80,16 +83,14 @@ function getPublicStatus(viewer) {
   cleanStaleDevices();
   const showUsername = !!(viewer && viewer.username);
   const activeDevices = [];
-  for (const [id, device] of devices) {
+  for (const device of devices.values()) {
     if (device.active) {
-      // deviceId 格式：`${username}_${deviceName}`（下划线分隔）
-      // username 不含下划线（见 src/routes/auth.js 中 usernameSchema 的正则约束），可用 lastIndexOf 切分
-      const sep = id.lastIndexOf('_');
-      const username = sep > 0 ? id.slice(0, sep) : id;
-      const deviceName = sep > 0 ? id.slice(sep + 1) : '';
+      // 归属信息直接取记录字段（结构化存储，不再从 key 字符串切分，
+      // 旧实现的 lastIndexOf('_') 在 deviceName 含下划线时会串号）
+      const { username, deviceName } = device;
       // 匿名访客拿到的 id 去掉了用户名前缀（仅保留 deviceName），防止通过 key 枚举在线用户名
       // 前台 status-client.js / site.js 优先使用独立的 deviceName 字段，id 仅作兼容回退
-      const exposedId = showUsername ? id : deviceName;
+      const exposedId = showUsername ? `${username}_${deviceName}` : deviceName;
       activeDevices.push({
         id: exposedId,
         username: showUsername ? username : 'anonymous',
@@ -131,12 +132,12 @@ function broadcast() {
 
 // 更新设备状态：写入内存并广播给所有 SSE 客户端
 // 写入前对各字段做长度截断，防止恶意超长字符串污染内存
-// deviceId 形如 `${username}_${deviceName}`，username 由调用方传入用于配额控制
-function updateStatus(deviceId, data) {
-  const sep = deviceId.lastIndexOf('_');
-  const username = sep > 0 ? deviceId.slice(0, sep) : null;
-
-  devices.set(deviceId, {
+// username 来自会话（服务端可信），deviceName 来自客户端，两者分开存储、不拼接切分
+function updateStatus(username, deviceName, data) {
+  const name = String(deviceName).slice(0, 50);
+  devices.set(deviceKey(username, name), {
+    username,
+    deviceName: name,
     active: data.active,
     app: String(data.app || '').slice(0, 100),
     title: String(data.title || '').slice(0, 300),
@@ -145,15 +146,15 @@ function updateStatus(deviceId, data) {
   });
 
   // 配额控制：先限制单用户设备数，再兜全局上限
-  if (username) evictUserDevices(username, MAX_DEVICES_PER_USER);
+  evictUserDevices(username, MAX_DEVICES_PER_USER);
   enforceGlobalCap();
 
   broadcast();
 }
 
 // 清除单个设备状态（设备离线时使用）
-function clearStatus(deviceId) {
-  devices.delete(deviceId);
+function clearStatus(username, deviceName) {
+  devices.delete(deviceKey(username, String(deviceName).slice(0, 50)));
   broadcast();
 }
 

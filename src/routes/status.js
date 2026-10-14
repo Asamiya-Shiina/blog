@@ -68,17 +68,16 @@ const statusSchema = z.object({
 });
 
 // POST /api/data：客户端上报当前状态
-// deviceId = 用户名_设备名，用于区分同一用户的多个设备
+// 服务端按会话用户名 + 设备名定位设备（两者分开传递，不拼接字符串）
 router.post('/', requireAuth, statusLimiter, (req, res) => {
   const parsed = statusSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid request' });
   }
-  const deviceId = `${req.user.username}_${parsed.data.deviceName}`;
   if (parsed.data.active) {
-    store.updateStatus(deviceId, parsed.data);
+    store.updateStatus(req.user.username, parsed.data.deviceName, parsed.data);
   } else {
-    store.clearStatus(deviceId);
+    store.clearStatus(req.user.username, parsed.data.deviceName);
   }
   res.json({ ok: true });
 });
@@ -93,8 +92,7 @@ router.post('/off', requireAuth, statusLimiter, (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid request' });
   }
-  const deviceId = `${req.user.username}_${parsed.data.deviceName}`;
-  store.clearStatus(deviceId);
+  store.clearStatus(req.user.username, parsed.data.deviceName);
   res.json({ ok: true });
 });
 
