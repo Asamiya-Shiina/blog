@@ -144,19 +144,23 @@ db.exec(`
 `);
 
 // 数据库迁移
+//
+// 编号沿用历史（现存 1、4），中间的 2/3 已于 2026-10 移除：
+//   迁移 2（重建 users 表以兼容开放注册之前的老库）→ 删除：
+//     该重建曾排在 ALTER 迁移之后，把刚加上的 session_epoch 静默丢掉，
+//     命中老库升级时登录/鉴权全线 500。现改为下方「结构基线自检」直接拒绝启动。
+//   迁移 3（tokens_valid_after 时间戳吊销列）→ 删除：已被 session_epoch 取代，
+//     全项目无任何读取。
+//
+// ⚠️ 顺序约束（防复发路标）：将来若必须引入【重建表】式迁移，
+//   必须排在所有 ALTER 迁移【之前】——ALTER 加的列不会被拷进新建的表，
+//   先 ALTER 后重建必然静默丢列。ALTER 类迁移跑完后必须做后置断言（见自检）。
 
 // 迁移 1：users 表添加 hash_version 列，区分密码哈希方案
 // 1 = bcrypt(明文)（旧方案）
 // 2 = bcrypt(sha256(明文))（当前方案，规避 bcrypt 72 字节输入限制）
 try {
   db.exec(`ALTER TABLE users ADD COLUMN hash_version INTEGER NOT NULL DEFAULT 1`);
-} catch (_) { /* 列已存在则忽略 */ }
-
-// 迁移 3：users 表添加 tokens_valid_after 列
-// 历史方案：用秒级时间戳比较 token 的 iat，判断是否早于吊销点
-// 注意：该列已被 session_epoch 取代（见迁移 4），保留仅为兼容旧数据
-try {
-  db.exec(`ALTER TABLE users ADD COLUMN tokens_valid_after INTEGER NOT NULL DEFAULT 0`);
 } catch (_) { /* 列已存在则忽略 */ }
 
 // 迁移 4：users 表添加 session_epoch 列
@@ -174,55 +178,36 @@ try {
   db.exec(`ALTER TABLE users ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0`);
 } catch (_) { /* 列已存在则忽略 */ }
 
-// 迁移 2：users 表结构升级（开放注册 + 个人主页）
-// 旧表 role 仅允许 'admin'，且缺少 email/status/verify/name/bio/avatar 列
-// SQLite 修改 CHECK 约束需重建表，检测到缺 email 列时执行一次性重建
+// 结构基线自检：users 表必须含 email 列（= 至少是「开放注册」版本创建的库）
+// 早于该年代的老库不再支持原地升级——旧方案用「重建表」兼容，却排在 ALTER 迁移之后
+// 丢过 session_epoch（见文件头部顺序约束），与其修一个注定少人走的路径，不如明确拒绝。
+// 本检查位于 db.js 模块加载期，先于 server.js 里 db-sweep 等一切使用 users 表的代码。
 const userCols = db.pragma('table_info(users)').map(c => c.name);
 if (!userCols.includes('email')) {
-  // 审计 H4：FK 关闭必须用 try/finally 兜底，否则中途抛错将永久残留 OFF 状态
-  // 后续所有 FK 约束（comments.post_id 等）都会被静默禁用
-  db.exec(`PRAGMA foreign_keys = OFF`);
-  try {
-    db.transaction(() => {
-      db.exec(`
-        ALTER TABLE users RENAME TO users_old;
-        CREATE TABLE users (
-          id             INTEGER PRIMARY KEY AUTOINCREMENT,
-          username       TEXT NOT NULL UNIQUE,
-          password_hash  TEXT NOT NULL,
-          role           TEXT NOT NULL DEFAULT 'user'
-                           CHECK (role IN ('admin','moderator','user')),
-          email          TEXT UNIQUE,
-          status         TEXT NOT NULL DEFAULT 'active'
-                           CHECK (status IN ('active','pending')),
-          verify_token   TEXT,
-          verify_expires TEXT,
-          name           TEXT,
-          bio            TEXT,
-          avatar_filename TEXT,
-          hash_version   INTEGER NOT NULL DEFAULT 1,
-          created_at     TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
-        );
-        INSERT INTO users (id, username, password_hash, role, hash_version, created_at)
-          SELECT id, username, password_hash, role, hash_version, created_at FROM users_old;
-        DROP TABLE users_old;
-        CREATE INDEX idx_users_username ON users(username);
-        CREATE INDEX idx_users_email ON users(email);
-      `);
-    })();
-  } finally {
-    db.exec(`PRAGMA foreign_keys = ON`);
-  }
-  // 注意：此处不要调用 invalidateUserCount()
-  // 该函数会引用下方 let 声明的 _userCountCache，而迁移代码位于其声明之前，
-  // 在冷启动（旧库缺 email 列）的路径上会触发 TDZ 异常。
-  // 此时缓存尚未被任何查询填充（其值本就为 null），invalidate 不会产生实际效果，故省略。
+  console.error([
+    '[db] 数据库结构过旧：users 表缺少 email 列（早于开放注册版本），本版本不支持该年代的库原地升级。',
+    '[db] 处理方式二选一：',
+    '[db]   1) 用较新的备份恢复 data/blog.sqlite（推荐）',
+    '[db]   2) 保留数据：先备份库文件，再执行  ALTER TABLE users ADD COLUMN email TEXT;',
+    '[db]      注意：老库 role 约束仍为仅 admin、status/verify 等列一并缺失，强烈建议走 1）',
+  ].join('\n'));
+  process.exit(1);
 }
 
-// 保证 email 索引存在（全新库或迁移后均成立）
+// 迁移后置断言：上面两个 ALTER 都用 try/catch 兜底，而 catch 会吞掉【一切】异常
+// （不只是「列已存在」）。失败若不校验结果，就会像当年丢 session_epoch 一样静默带病运行，
+// 直到有人登录才炸。这里对关键列做存在性断言，迁移没落地就拒绝启动。
+for (const required of ['status', 'hash_version', 'session_epoch']) {
+  if (!userCols.includes(required)) {
+    console.error(`[db] 迁移后 users 表仍缺少 ${required} 列（ALTER 未生效），数据库结构异常，拒绝启动。`);
+    process.exit(1);
+  }
+}
+
+// 保证 email 索引存在（自检已保证 email 列存在；对新库幂等）
 try {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
-} catch (_) { /* 列尚不存在则忽略，等迁移完成后再建 */ }
+} catch (_) { /* 理论上不会失败，保守兜底 */ }
 
 // 初始化默认状态配置
 // 首次运行插入默认值，后续启动不覆盖（INSERT OR IGNORE）
