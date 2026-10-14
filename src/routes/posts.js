@@ -50,10 +50,39 @@ function uniqueSlug(base, excludeId) {
 }
 
 // 整体替换某文章的分类关联（传入空数组可清空分类）
+// 去重：post_categories 是 (post_id, category_id) 复合主键，重复 ID 直接插入会撞主键报错
 function setPostCategories(postId, categoryIds) {
   db.prepare('DELETE FROM post_categories WHERE post_id = ?').run(postId);
   const ins = db.prepare('INSERT INTO post_categories (post_id, category_id) VALUES (?, ?)');
-  for (const id of categoryIds || []) ins.run(postId, id);
+  for (const id of [...new Set(categoryIds || [])]) ins.run(postId, id);
+}
+
+// 返回请求中不存在的分类 ID
+// 预校验：把可预见的外键错误挡在事务外，返回精确 400 而不是让 SQLite 抛错变 500
+function missingCategoryIds(categoryIds) {
+  const ids = [...new Set(categoryIds || [])];
+  if (ids.length === 0) return [];
+  const rows = db.prepare(
+    `SELECT id FROM categories WHERE id IN (${ids.map(() => '?').join(',')})`
+  ).all(...ids);
+  const have = new Set(rows.map(r => r.id));
+  return ids.filter(id => !have.has(id));
+}
+
+// SQLite 外键约束错误（预校验后仍可能命中：分类在校验与写入之间被并发删除）
+function isFkError(e) {
+  return !!e && e.code === 'SQLITE_CONSTRAINT_FOREIGNKEY';
+}
+
+// 分类参数预校验：存在性 + 统一 400 响应
+function checkCategoryIds(res, categoryIds) {
+  if (categoryIds === undefined) return true;
+  const missing = missingCategoryIds(categoryIds);
+  if (missing.length) {
+    res.status(400).json({ error: 'invalid category_ids', missing });
+    return false;
+  }
+  return true;
 }
 
 // 一次性查询多篇文章的分类映射：{ postId: [{id,name}, ...] }
@@ -193,19 +222,29 @@ router.post('/', requireManager, (req, res) => {
     return res.status(400).json({ error: 'invalid' });
   }
   const { title, slug, excerpt, content_md, status, category_ids } = parsed.data;
+  if (!checkCategoryIds(res, category_ids)) return;
   // slug 优先使用手动指定值，否则从标题生成
   const baseSlug = slug ? slugify(slug) : slugify(title);
   const finalSlug = uniqueSlug(baseSlug);
 
-  const info = db.prepare(`
-    INSERT INTO posts (slug, title, excerpt, content_md, status)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(finalSlug, title, excerpt || null, content_md, status || 'draft');
+  // 事务：文章 INSERT + 分类关联必须原子——任何一步失败整体回滚，
+  // 不留无分类的幽灵文章（失败时客户端收到 4xx，库中也不能有半截数据）
+  let newId;
+  try {
+    newId = db.transaction(() => {
+      const info = db.prepare(`
+        INSERT INTO posts (slug, title, excerpt, content_md, status)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(finalSlug, title, excerpt || null, content_md, status || 'draft');
+      setPostCategories(info.lastInsertRowid, category_ids);
+      return Number(info.lastInsertRowid);
+    })();
+  } catch (e) {
+    if (isFkError(e)) return res.status(400).json({ error: 'invalid category_ids' });
+    throw e;
+  }
 
-  // 写入分类关联
-  setPostCategories(info.lastInsertRowid, category_ids);
-
-  const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(info.lastInsertRowid);
+  const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(newId);
   res.status(201).json(rowToPost(row, { withHtml: true }));
 });
 
@@ -237,15 +276,25 @@ router.put('/:id', requireManager, (req, res) => {
     // slug 发生变化时检查唯一性
     if (nextSlug !== existing.slug) nextSlug = uniqueSlug(nextSlug, id);
   }
+  // 分类预校验放在任何写入之前：坏 ID 时正文/分类都不该动
+  if (!checkCategoryIds(res, patch.category_ids)) return;
 
-  db.prepare(`
-    UPDATE posts
-    SET title = ?, slug = ?, excerpt = ?, content_md = ?, status = ?, updated_at = datetime('now', '+8 hours')
-    WHERE id = ?
-  `).run(next.title, nextSlug, next.excerpt, next.content_md, next.status, id);
+  // 事务：UPDATE + 分类替换原子提交——避免“正文已保存、分类被清空”的半提交中间态
+  try {
+    db.transaction(() => {
+      db.prepare(`
+        UPDATE posts
+        SET title = ?, slug = ?, excerpt = ?, content_md = ?, status = ?, updated_at = datetime('now', '+8 hours')
+        WHERE id = ?
+      `).run(next.title, nextSlug, next.excerpt, next.content_md, next.status, id);
 
-  // 分类：提交了 category_ids 才进行替换，未提交则保持原状
-  if (patch.category_ids !== undefined) setPostCategories(id, patch.category_ids);
+      // 分类：提交了 category_ids 才进行替换，未提交则保持原状
+      if (patch.category_ids !== undefined) setPostCategories(id, patch.category_ids);
+    })();
+  } catch (e) {
+    if (isFkError(e)) return res.status(400).json({ error: 'invalid category_ids' });
+    throw e;
+  }
 
   const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(id);
   res.json(rowToPost(row, { withHtml: true }));
