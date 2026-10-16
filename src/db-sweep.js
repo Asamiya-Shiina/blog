@@ -1,19 +1,12 @@
 'use strict';
 
-// 数据库清理模块
+// 数据库清理模块。
+//   1. page_views：30 天 + 5 万行硬上限(双保险,模式见 src/audit.js 保留策略)。
+//   2. pending users：委托 db.sweepExpiredPendingUsers() 清理过期行。
 //
-// 处理两类会持续增长的 DB 表：
-//   1. page_views：每次访问 /api/stats/view 写入一行，仅查询「今日」数据，历史数据无访问需求
-//      → 保留 30 天 + 5 万行硬上限（双保险，与 src/audit.js:42-46 模式一致）
-//   2. pending users：注册时未完成邮箱验证的临时用户
-//      → 委托 db.sweepExpiredPendingUsers() 清理 verify_expires 已过期的行
-//
-// 调度（与 src/audit.js:58-62 模式一致）：
-//   - 模块加载时立即执行一次
-//   - setInterval(6h) + .unref()
-//   - 任一清理失败仅 console.warn，不影响后续 sweep
-//
-// 由 server.js require() 触发加载，无独立 CLI 入口。
+// 调度：模块加载立即跑一次,然后 setTimeout 链每 6h 一次 + unref()。
+// 任何清理失败仅 console.warn,不影响后续 sweep。
+// 由 server.js require() 触发加载,无独立 CLI 入口。
 
 const db = require('./db');
 
@@ -22,7 +15,6 @@ const HARD_CAP = 50_000;
 const SOFT_CAP = 40_000;
 const SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 小时
 
-// page_views 清理
 const deleteByAgeStmt = db.prepare(
   "DELETE FROM page_views WHERE viewed_at < datetime('now', '+8 hours', ?)"
 );
@@ -59,7 +51,6 @@ async function sweepPageViews() {
   }
 }
 
-// pending users 清理
 async function sweepPendingUsers() {
   try {
     const removed = db.sweepExpiredPendingUsers();
@@ -87,5 +78,4 @@ function schedule() {
     });
 }
 
-// 启动后立即执行一次
 schedule();

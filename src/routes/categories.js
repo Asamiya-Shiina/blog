@@ -1,10 +1,7 @@
 'use strict';
 
-// 分类路由
-// 提供分类列表、新建、重命名、删除等接口，供编辑器多选与全站筛选使用
-// 所有路由均要求登录（requireManager）
-// 注：新建与重命名通过 zod 校验唯一性；删除分类时关联记录由外键 CASCADE 自动清理
-// by ALyCE_Aoi
+// 分类路由（全部 requireManager）
+// 删除分类时关联记录由外键 CASCADE 自动清理
 
 const express = require('express');
 const { z } = require('zod');

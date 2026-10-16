@@ -1,9 +1,6 @@
 'use strict';
 
-// 文章路由
-// 提供列表、单篇查询、新建、更新、删除、预览等接口
-// 所有路由均要求登录（requireManager）
-// by ALyCE_Aoi
+// 文章路由（全部 requireManager）
 
 const express = require('express');
 const { z } = require('zod');

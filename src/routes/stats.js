@@ -1,13 +1,7 @@
 'use strict';
 
-// 访问统计路由
-//
-// 接口说明：
-//   POST /api/stats/view    记录一次访问（带 IP 去重 + 5 分钟缓存）
-//   GET  /api/stats/today   返回今日浏览人数（按 IP 去重）
-// 访问统计数据仅用于后台统计与分析，前端不直接使用
-// 由 geoip-lite 在服务端解析属地，前端不感知；IP 仅管理员可见
-// by ALyCE_Aoi
+// 访问统计路由：写操作(/api/stats/view) 同 IP+path 5 分钟去重,
+// 读操作(/api/stats/today) 仅返回今日独立 IP 数。
 
 const express = require('express');
 const rateLimit = require('express-rate-limit');

@@ -1,17 +1,6 @@
 'use strict';
 
-// 认证路由
-// 包含首次引导、登录、退出、用户管理、密码修改等接口
-// 首次引导：
-//   GET  /api/setup-status  公开：返回是否需要初始化（无管理员账号时为 true）
-//   POST /api/setup         公开 + 限流：创建首个管理员账号（仅在无用户时可调用）
-// 开放注册：
-//   GET  /api/captcha       公开 + 限流：生成滑块验证数据
-//   POST /api/register      公开 + 限流：注册新用户（需滑块验证）
-// 登录 / 退出：
-//   POST /api/login         公开 + 限流：登录，返回 session cookie
-//   POST /api/logout        登录：清除 session cookie
-// by ALyCE_Aoi
+// 认证路由：首次引导 / 开放注册 / 登录 / 退出 / 用户管理 / 密码修改
 
 const path = require('node:path');
 const fs = require('fs');

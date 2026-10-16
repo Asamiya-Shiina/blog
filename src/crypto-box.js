@@ -1,10 +1,6 @@
 'use strict';
 
-// AES-256-GCM 加密 / 解密工具
-// 用于把 SMTP 密码等敏感字段在写入 SQLite 前加密
-// 密钥由 SESSION_SECRET 经 scrypt 派生，避免密钥本身落盘
-// 每次加密使用随机 IV，加密结果不可重复
-//
+// AES-256-GCM 加密 / 解密 SMTP 密码。
 // 输出格式：base64(iv 12B || authTag 16B || ciphertext)
 
 const crypto = require('node:crypto');

@@ -1,13 +1,7 @@
 'use strict';
 
-// 实时状态路由
-// 提供桌面客户端上报当前活动状态、SSE 推送、管理配置等接口
-// API 分三层：客户端（需登录）、公开（无需登录）、管理（需管理员）
-// 客户端上报状态时，服务端会根据管理配置过滤掉不需要的应用与窗口标题
-// 公开接口仅返回活跃设备的公开信息，未登录访客拿到的 username 统一为 'anonymous'，避免枚举在线用户名
-// 管理接口可修改黑名单、映射等配置，客户端会在下一次上报时生效
-// by ALyCE_Aoi
-
+// 实时状态路由：客户端上报 / 公开 SSE / 管理配置三层。
+// 未登录访客拿到的 username 统一为 'anonymous'，避免枚举在线用户名（见 status-store.js）。
 
 const express = require('express');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');

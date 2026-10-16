@@ -1,8 +1,7 @@
 'use strict';
 
-// 文章页面视图模块
-// 服务端渲染 HTML：文章列表、文章详情、搜索页、提示页
-// 所有非 Markdown 的用户输入通过 escapeHtml 转义，Markdown 通过 DOMPurify 消毒
+// 文章页面视图：列表 / 详情 / 搜索 / 提示页。
+// 非 Markdown 的用户输入用 escapeHtml 转义,Markdown 走 sanitizeMarkdown(全站唯一消毒入口)。
 
 const { marked } = require('marked');
 const DOMPurify = require('isomorphic-dompurify');

@@ -1,17 +1,8 @@
 'use strict';
 
 // 留言板路由
-//
-// 接口说明：
-//   GET    /api/messages        公开：嵌套列表（顶层 + replies）。管理员响应额外携带 IP。
-//   POST   /api/messages        登录 + 限流：新建留言或回复。
-//   DELETE /api/messages/:id    登录：作者本人或管理员可删。
-//
 // 属地由 geoip-lite 在服务端解析，前端不感知；IP 仅管理员可见。
-// 留言内容禁止零宽字符与控制字符（除常见换行 / 制表外），防止混淆、绕过审核以及对前端渲染的注入攻击
-// 留言内容长度限制 2000 字符，防止刷屏与 SQLite 被塞爆
-// 留言写操作限流：15 分钟内最多 30 次，防止刷屏
-// by ALyCE_Aoi
+// 内容过滤规则与限流参数见本文件内 FORBIDDEN_CONTENT / writeLimiter 定义处。
 
 const express = require('express');
 const rateLimit = require('express-rate-limit');

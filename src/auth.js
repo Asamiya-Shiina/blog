@@ -56,10 +56,9 @@ if (maxRun >= SECRET.length * 0.5) {
   process.exit(1);
 }
 
-// Cookie 配置
-const COOKIE_NAME = 'sid';                        // session cookie 名称
+const COOKIE_NAME = 'sid';
 const MAX_AGE_SECONDS = 365 * 24 * 60 * 60;       // 1 年有效期
-const BCRYPT_COST = 12;                            // bcrypt 计算成本（2^12 = 4096 轮迭代）
+const BCRYPT_COST = 12;
 
 // session token 的 MAC 固定为 64 位小写十六进制
 const HEX64_RE = /^[0-9a-f]{64}$/;
@@ -90,11 +89,8 @@ function sign(userId, iat, expiresAt, epoch) {
 }
 
 // Session Token 校验
-// 解析 token，验证 HMAC 签名（使用恒定时间比较）并检查是否过期
-// Session Token 校验
-// 解析 token，验证 HMAC 签名（使用恒定时间比较）并检查是否过期
-//
-// user 参数可选：传入时额外校验会话世代号（epoch）。
+// 解析 token，验证 HMAC 签名(使用恒定时间比较)并检查是否过期。
+// user 参数可选：传入时额外校验会话世代号(epoch)。
 // 世代号校验是吊销机制的核心，必须由调用方把用户记录传进来。
 // 若调用方已经查过用户却忘了传，会静默跳过吊销检查，所以要格外注意。
 function verify(token, user) {
@@ -315,9 +311,8 @@ async function verifyPassword({ password, password_hash }, user) {
 
 // 鉴权中间件
 
-// requireAuth：验证 session token，将用户信息挂载到 req.user
-// requireAuth：验证 session token，将用户信息挂载到 req.user
-// 吊销校验（会话世代号）在 verify() 内完成，因此必须把用户记录传给它
+// 验证 session token,将用户信息挂载到 req.user。
+// 吊销校验(会话世代号)在 verify() 内完成,因此必须把用户记录传给它。
 function requireAuth(req, res, next) {
   const token = req.cookies && req.cookies[COOKIE_NAME];
   // 先用不带 user 的调用做一次廉价格式检查，拿到 userId 再去查库

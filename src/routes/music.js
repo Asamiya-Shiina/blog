@@ -1,11 +1,5 @@
 'use strict';
 
-// 音乐路由
-// 提供列表、上传、删除与设置当前播放歌曲等接口
-// 公开接口：GET /api/music/active（前台播放器调用）
-// 管理接口：其余全部需要登录
-// ALyCE_Aoi
-
 const path = require('path');
 const fs = require('fs');
 const crypto = require('node:crypto');

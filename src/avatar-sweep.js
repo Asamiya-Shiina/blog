@@ -1,22 +1,14 @@
 'use strict';
 
-// 上传孤儿清理
-//
-// 维护三类资源的「DB 引用集 与 磁盘文件集」一致：
+// 上传孤儿清理：维持 DB 引用集与磁盘文件集一致。
 //   1. 头像孤儿：data/uploads/avatars/ 中未被 users.avatar_filename 引用的文件
 //   2. 音乐孤儿：data/uploads/music/   中未被 music.filename     引用的文件
-//   3. WAL 回收：周期性 PRAGMA wal_checkpoint(TRUNCATE)，将 -wal 内容写回主数据库并截断
+//   3. WAL 回收：周期性 PRAGMA wal_checkpoint(TRUNCATE),回收 -wal 空间
 //
-// 调度（与 src/audit.js:58-62 一致）：
-//   - 模块加载时立即执行一次
-//   - setTimeout 链式调度，每 24h 一次 + unref()
-//   - 任一清理失败仅 console.warn，不影响后续 sweep
-//
-// 文件 IO 改异步：原实现用 fs.statSync / fs.unlinkSync / fs.readdirSync，
-// 单次 sweep 期间会阻塞事件循环几百毫秒（孤儿文件多时）。
-// 改为 fs.promises.* 后，每次 stat/unlink 之间的 await 让出事件循环，
-// 24h 一次的 sweep 不会卡住 HTTP 路径。
-// 由 server.js require() 触发加载，无独立 CLI 入口。
+// 文件 IO 走 fs.promises：原同步实现在孤儿文件多时会阻塞事件循环几百毫秒。
+// 调度：模块加载立即跑一次,然后 setTimeout 链每 24h 一次 + unref()。
+// 任何清理失败仅 console.warn,不影响后续 sweep。
+// 由 server.js require() 触发加载,无独立 CLI 入口。
 
 const path = require('node:path');
 const fs = require('node:fs');
@@ -27,7 +19,6 @@ const AVATAR_DIR = path.join(__dirname, '..', 'data', 'uploads', 'avatars');
 const MUSIC_DIR  = path.join(__dirname, '..', 'data', 'uploads', 'music');
 const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 小时
 
-// 异步 readdir：目录不存在时建一个再返回空
 async function readdirSafe(dir) {
   try {
     return await fsp.readdir(dir);
@@ -88,7 +79,6 @@ async function unlinkOrphans(dir, orphans) {
   return { removed, failed };
 }
 
-// 头像孤儿清理
 async function sweepOrphanAvatars() {
   try {
     const rows = db.prepare('SELECT avatar_filename FROM users WHERE avatar_filename IS NOT NULL').all();
@@ -105,7 +95,6 @@ async function sweepOrphanAvatars() {
   }
 }
 
-// 音乐孤儿清理
 async function sweepOrphanMusic() {
   try {
     const rows = db.prepare('SELECT filename FROM music').all();
@@ -122,11 +111,9 @@ async function sweepOrphanMusic() {
   }
 }
 
-// WAL checkpoint
-// TRUNCATE 模式：将 wal 内容写回主数据库文件后截断 -wal，并把 -shm 标记为可清理
-// 常见失败原因：其他进程持锁（本项目为单进程，正常情况下不应出现）/ 磁盘已满
-// 失败仅 warn，不影响其他清理任务
-// 保持同步：pragma 是同步的，单次操作通常 < 5ms，没必要为它改 async
+// wal_checkpoint(TRUNCATE)：把 -wal 内容写回主库并截断,回收磁盘空间。
+// 失败常见原因：其他进程持锁(本项目单进程,正常不应出现)/ 磁盘已满。
+// 保持同步：pragma 是同步的,单次 < 5ms,没必要为它改 async。
 function walCheckpoint() {
   try {
     // better-sqlite3 pragma 返回 [busy, log_pages, checkpointed_pages]
@@ -158,5 +145,4 @@ function schedule() {
     });
 }
 
-// 启动后立即执行一次
 schedule();

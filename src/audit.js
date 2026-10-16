@@ -9,14 +9,7 @@ const insertStmt = db.prepare(
   'INSERT INTO audit_log (actor_id, target_id, action, detail) VALUES (?, ?, ?, ?)'
 );
 
-/**
- * 写一条审计日志
- * @param {object} entry
- * @param {number|null} entry.actorId  操作人 user.id（系统或匿名时传 null）
- * @param {number|null} [entry.targetId] 作用对象 user.id（可选）
- * @param {string}      entry.action  动作名，如 'user.create' / 'role.change' / 'password.change'
- * @param {object}      [entry.detail] 额外上下文（任意可 JSON 序列化的对象）
- */
+// 写一条审计日志。失败仅记录,不阻塞业务路径。
 function log({ actorId = null, targetId = null, action, detail = null }) {
   try {
     const json = detail == null ? null : JSON.stringify(detail);
