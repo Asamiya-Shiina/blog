@@ -42,8 +42,13 @@ function geoipEnabled() {
   return !isGeoipDisabled();
 }
 
-// 从 Express req 抽取第一个 IPv4；纯 IPv6 时回退为完整 IPv6 字符串
-// server.js 已开启 trust proxy，req.ip 沿 X-Forwarded-For 回溯
+// 从 Express req 抽取 IP。
+// 取 IPv4 字面量(回退 iPv6 完整字符串)。
+//
+// 为什么先抓 IPv4:留言板属地显示依赖 geoip-lite,
+// 该库对 IPv4 的解析精度远高于 IPv6(后者多为 Anycast/CDN 边缘节点)。
+// 即使客户端真实是 IPv6,也退回 [[RFC5707]] 约定俗成的第一个 IPv4。
+// trust proxy 已开启,req.ip 沿 X-Forwarded-For 回溯到最近的客户端 IP。
 function getClientIp(req) {
   const raw = req.ip || req.socket.remoteAddress || '';
   const m = raw.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/);
@@ -72,8 +77,13 @@ const CN_REGION_CN = {
   NX: '宁夏', JX: '江西',
 };
 
-// 把 IP 解析成简短属地字符串，例如 "中国/北京"、"美国"。
-// 查不到任何信息时返回空串（前端不渲染）。
+// 把 IP 解析成简短属地字符串,例如 "中国/北京"。
+// 查不到任何信息时返回空串(前端不渲染)。
+//
+// 三层 fallback:
+//   1) 库查不到 → 空串(区别于 "未知" — 前者是不在数据库,后者是库未加载)
+//   2) 国家码不在映射表 → 用 ISO 英文码(显示成 US/JP 等,代替中文)
+//   3) CN 且省份可解析 → 拼成 "中国/北京";CN 但省份缺失 → 仅返回 "中国"
 function formatLocation(ip) {
   const g = loadGeoip();
   if (!ip || !g) return '';

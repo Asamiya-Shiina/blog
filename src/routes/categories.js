@@ -11,12 +11,16 @@ const { requireManager } = require('../auth');
 
 const router = express.Router();
 
-// 分类名校验：非空、首尾去空白、限制长度、禁止包含换行
+// 分类名校验 schema:1-50 字符、trim 后非空。
+// max(50) 经验值:UI 侧栏一行能放下的最长分类名;再长会换行影响布局。
+// transform trim:避免前后空白造成「看似不存在实则撞名」的歧义(z.string().min(1)
+// 在 trim 前判长度,但 trim 后可能变空 → 这里二次判在调用方)。
 const nameSchema = z.object({
   name: z.string().min(1).max(50).transform(s => s.trim()),
 });
 
-// 查询某文章关联的分类列表（供 posts 路由复用）
+// 查询某文章关联的分类列表(供 posts 路由复用,挂在 router 上 export 出去)。
+// 单文章查询走该函数,批量走 posts.js 内部的 categoriesForPosts(N+1 优化版)。
 function getPostCategories(postId) {
   return db.prepare(`
     SELECT c.id, c.name

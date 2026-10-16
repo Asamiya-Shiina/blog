@@ -34,7 +34,9 @@ function deviceKey(username, deviceName) {
   return username + '\u0000' + deviceName;
 }
 
-// 清理过期设备：超过 STALE_TIMEOUT_MS 未更新的设备将被移除
+// 清理过期设备:超过 STALE_TIMEOUT_MS 未更新的设备视为掉线,从 Map 移除。
+// Map 遍历顺序即插入顺序 → 早掉线设备先被遍历,因此先被清理;
+// 这里不主动遍历删除「老于 X 秒前」的项,因为所有设备的过期判定都是同一阈值。
 function cleanStaleDevices() {
   const now = Date.now();
   for (const [id, device] of devices) {
@@ -44,9 +46,11 @@ function cleanStaleDevices() {
   }
 }
 
-// 驱逐某用户最旧的设备条目，直到低于上限
-// 按记录上的 username 字段精确匹配（旧实现的前缀匹配会把 alice_bob 算进 alice，
-// 也会被 deviceName 换前缀切出的假“用户桶”绕过）
+// 驱逐某用户最旧的设备条目,直到不超 keepAtMost。
+// 按记录上的 username 字段精确匹配(旧实现的前缀匹配会把 alice_bob 算进 alice,
+// 也会被 deviceName 换前缀切出的假"用户桶"绕过)。
+// 排序用 updatedAt 而非插入顺序:用户主动离线后再次上线应该刷新其「最新」位,
+// 防止「谁先来谁占位」导致频繁切换设备的活跃用户被反复踢出。
 function evictUserDevices(username, keepAtMost) {
   const owned = [];
   for (const [id, d] of devices) {
@@ -62,7 +66,9 @@ function evictUserDevices(username, keepAtMost) {
   }
 }
 
-// 全局超限时按插入顺序驱逐最旧的 20%
+// 全局超限时按插入顺序驱逐最旧的 20%。
+// 为什么是 0.8 而非砍到上限:留 20% 缓冲意味着新一轮上报立刻超限前有一段窗口,
+// 否则每次 updateStatus 都会触发 enforceGlobalCap,sort 与遍历成本持续叠加。
 function enforceGlobalCap() {
   if (devices.size <= MAX_DEVICES) return;
   const target = Math.floor(MAX_DEVICES * 0.8);
@@ -74,11 +80,13 @@ function enforceGlobalCap() {
   }
 }
 
-// 获取公开状态：清理过期设备后，返回所有活跃设备信息
-// viewer 可选：
-//   - 传入当前登录用户对象时，每台设备额外返回 username 字段
-//   - 未传入或匿名访问时，username 统一为 'anonymous'，仅暴露用户自愿公开的 deviceName
-// 该设计可防止公开访客通过 /api/data 或 SSE 枚举在线用户名
+// 获取公开状态:清理过期设备后,返回所有活跃设备信息。
+// viewer 可选:
+//   - 传入当前登录用户对象时,每台设备额外返回 username 字段
+//   - 未传入或匿名访问时,username 统一为 'anonymous',仅暴露用户自愿公开的 deviceName
+//
+// 为什么 username 受 viewer 控制:防止公开访客通过 /api/data 或 SSE 枚举在线用户名。
+// 管理员面板另走需鉴权接口 /api/data/admin,不受此匿名化影响。
 function getPublicStatus(viewer) {
   cleanStaleDevices();
   const showUsername = !!(viewer && viewer.username);
@@ -107,10 +115,13 @@ function getPublicStatus(viewer) {
   return { devices: activeDevices };
 }
 
-// SSE 广播：向所有连接的客户端推送最新状态
-// 背压处理：忽略 write() 返回值会让慢客户端把数据堆在 socket 缓冲区里，
-// 设备越多 payload 越大、广播越频繁，堆积越严重。
-// 这里在写缓冲超过阈值时主动断开该客户端（浏览器会自动重连并拿到全量快照）。
+// SSE 广播:向所有连接的客户端推送最新状态。
+// 背压处理:忽略 write() 返回值会让慢客户端把数据堆在 socket 缓冲区里,
+// 设备越多 payload 越大、广播越频繁,堆积越严重。
+// 这里在写缓冲超过阈值时主动断开该客户端(浏览器会自动重连并拿到全量快照)。
+//
+// 阈值 1MB 经验值:活跃设备约 20 台时单次 payload ~5-30KB,1MB 缓冲可承受
+// 几十轮推送而不会成为瓶颈;再大就开始反向影响服务端 socket 内存。
 const SSE_MAX_BUFFERED_BYTES = 1024 * 1024;   // 1MB
 
 function broadcast() {
@@ -130,9 +141,14 @@ function broadcast() {
   }
 }
 
-// 更新设备状态：写入内存并广播给所有 SSE 客户端
-// 写入前对各字段做长度截断，防止恶意超长字符串污染内存
-// username 来自会话（服务端可信），deviceName 来自客户端，两者分开存储、不拼接切分
+// 更新设备状态:写入内存并广播给所有 SSE 客户端。
+// 写入前对各字段做长度截断,防止恶意超长字符串污染内存。
+//
+// username 来自会话(服务端可信),deviceName 来自客户端,两者分开存储、不拼接切分。
+// 截断长度经验值:
+//   app 100    → 进程名通常 < 50
+//   title 300  → 浏览器标签页标题 < 200
+//   deviceName 50 → 用户自取,约束在 50 内足以区分多设备
 function updateStatus(username, deviceName, data) {
   const name = String(deviceName).slice(0, 50);
   devices.set(deviceKey(username, name), {

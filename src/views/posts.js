@@ -37,14 +37,21 @@ function sanitizeMarkdown(md) {
   });
 }
 
-// HTML 实体转义：用于非 Markdown 的用户输入（如标题、摘要），防止 XSS
+// HTML 实体转义:用于非 Markdown 的用户输入(如标题、摘要),防止 XSS。
+// 与 sanitizeMarkdown 的区别:后者是为 Markdown 内容设计,允许受控的 HTML;
+// 本函数把任何输入当成纯文本,适合「标题/摘要/分类名/用户名」这种
+// 不应含 HTML 标记的字段。两者不能合一 —— 一旦混用,Mardown 渲染结果会
+// 把 <strong> 等合法标签二次转义成 &lt;strong&gt;。
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, ch => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[ch]));
 }
 
-// 格式化日期：ISO 格式 → YYYY-MM-DD HH:mm
+// 格式化日期:ISO 字符串 → "YYYY-MM-DD HH:mm"。
+// 数据库存的是 datetime('now', '+8 hours') 即北京时间 ISO(无时区后缀),
+// 直接字符串切片即可,无需 Date 解析(避免浏览器/Node 时区差异再渲染一次)。
+// 截 16 字符 = 「YYYY-MM-DDTHH:mm」去掉 T 与秒,卡片列表够用。
 function formatDate(s) {
   if (!s) return '';
   return String(s).replace('T', ' ').slice(0, 16);
@@ -126,7 +133,9 @@ function categorySidebar(categories = [], activeId = null, totalPosts = 0) {
   return `<aside class="cat-side"><h3>分类</h3>${all}${items}</aside>`;
 }
 
-// 单篇文章卡片（列表页 / 搜索页 / 分类页共用），meta 旁带分类标签
+// 单篇文章卡片(列表页 / 搜索页 / 分类页共用),meta 旁带分类标签。
+// slug 走 encodeURIComponent:虽然 slugify 限制了字符集,但前端编辑器可能手动
+// 输入「我的文章/草稿」这种字符,防止 URL 编码错位直接打到错误路由。
 function renderCard(p) {
   return `
         <article class="post-card">
@@ -136,8 +145,10 @@ function renderCard(p) {
         </article>`;
 }
 
-// 渲染文章列表页：卡片式布局，带入场动画
-// opts: { title, heading, subheading, categories, activeCategory, emptyText }
+// 渲染文章列表页:卡片式布局,带入场动画(CSS 负责)。
+// opts 形态选择:把页面间差异(标题、提示文案、当前分类)抽成 opts,
+// 让 renderCategoryPage / 未来其它列表变体共享同一套骨架,改一处全跟。
+// opts: { title, heading, subheading, categories, activeCategory, emptyText, totalPosts }
 function renderListPage(posts, opts = {}) {
   const {
     title = '文章', heading, subheading,
@@ -218,8 +229,11 @@ function renderPostPage(post) {
 </html>`;
 }
 
-// 渲染搜索页：搜索框 + 结果列表
-// 带查询词时禁用入场动画（class="searched"），结果直接显示
+// 渲染搜索页:搜索框 + 结果列表。
+// 三态 body(空查询 / 无结果 / 有结果)合在一个函数里,避免分散在多个 renderXxx。
+// 带查询词时禁用入场动画(class="searched"),结果直接显示。
+// autofocus:首次进入页面光标直接落在输入框,无需点击。
+// required:HTML5 原生校验,空提交会被拦截(零额外 JS)。
 function renderSearchPage(q, posts) {
   const query = String(q || '');
   let body;
@@ -259,8 +273,10 @@ function renderSearchPage(q, posts) {
 </html>`;
 }
 
-// 渲染提示页（限流、错误等）：居中显示标题和消息
-// link 只允许站内相对路径，防止 javascript: 之类的伪协议或属性逃逸
+// 渲染提示页(限流、错误等):居中显示标题和消息。
+// link 字段过 safeInternalLink 校验:防止 javascript: 之类的伪协议
+// 或属性逃逸(例如 ?"><script>...)注入到 href。
+// 正则白名单仅允许站内相对路径,失败回退到 /posts/。
 function safeInternalLink(link) {
   const s = String(link || '');
   return /^\/[A-Za-z0-9/_\-.?=&%]*$/.test(s) ? s : '/posts/';

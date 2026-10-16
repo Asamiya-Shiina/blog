@@ -219,8 +219,10 @@ app.use('/api/messages', require('./src/routes/messages'));  // 留言板
 
 // 公开文章页（无需登录）
 
-// 为一组文章行附加分类信息 [{id,name}]，返回带 categories 的新数组
-// 通过单次 IN 查询一次性拉回，避免 N+1
+// 为一组文章行附加分类信息 [{id,name}],返回带 categories 的新数组。
+// 通过单次 IN 查询一次性拉回所有文章的分类,避免 N+1(每篇文章各查一次)。
+// 排序在 SQL 层做 c.name,前端无需再排序。
+// 入参 rows 可为空(返回空数组而非 null);若为空数组也走「无 ids」分支直接返回原值。
 function withCategories(rows) {
   if (!rows || rows.length === 0) return rows || [];
   const ids = rows.map(r => r.id);
@@ -239,12 +241,17 @@ function withCategories(rows) {
   return rows.map(r => ({ ...r, categories: map.get(r.id) || [] }));
 }
 
-// 全站已发布文章总数：按文章行数计数，跨分类不重复
+// 全站已发布文章总数:按文章行数计数,跨分类不重复。
+// 用于侧栏「全部」链接的徽标数字。
+// 注意:这是单独的 COUNT 而非 posts 列表的 length —— 后者会被分页限制,
+// 侧栏要的是「这个分类下到底有几篇」的总览数字,不能用分页后的长度。
 function countPublishedPosts() {
   return db.prepare(`SELECT COUNT(*) AS n FROM posts WHERE status = 'published'`).get().n;
 }
 
-// 列出全部分类（含暂无已发布文章的分类），并附每类下的已发布文章数
+// 列出全部分类(含暂无已发布文章的分类),并附每类下的已发布文章数。
+// 用子查询(SELECT COUNT)而非 JOIN + GROUP BY:每分类单独算,空分类返回 0 行
+// 而不是被 JOIN 掉 —— 这是分类侧栏需要的行为(显示所有分类,即便暂无文章也要列出)。
 function getPublicCategories() {
   return db.prepare(`
     SELECT c.id, c.name,
@@ -321,7 +328,11 @@ function normalizeIp(raw) {
 // 搜索时间窗口：30 秒
 const SEARCH_WINDOW_MS = 30 * 1000;
 
-// 标准化搜索词：合并空白、首尾去空格、截断到 60 字符
+// 标准化搜索词:合并空白、首尾去空格、截断到 60 字符。
+// 60 字符上限经验值:覆盖中文 30 字、英文 60 词的正常搜索,
+// 远超此长度的查询是恶意/爬虫(LIKE 模糊匹配越短越快,过长直接丢弃)。
+// 合并空白防止「foo    bar」与「foo bar」被当成两个不同查询,
+// 绕开 repeatSearchGuard 的重复检测。
 function normalizeQuery(raw) {
   return (typeof raw === 'string' ? raw : '')
     .replace(/\s+/g, ' ')
@@ -329,7 +340,10 @@ function normalizeQuery(raw) {
     .slice(0, 60);
 }
 
-// 搜索过于频繁时的提示页
+// 搜索过于频繁时的提示页(HTML 而非 JSON)。
+// /search 是 GET 页面路由,浏览器期望 HTML 响应;返回 JSON 会让用户看到一个
+// 未样式化的 {error: ...}。429 是 HTTP 标准「Too Many Requests」状态码,
+// 同时配 Retry-After 头让客户端 / 爬虫知道要等多久再试。
 function tooManySearches(res, message) {
   return res.status(429).type('html').send(renderNoticePage({
     title: '搜索太频繁',
@@ -395,9 +409,11 @@ function repeatSearchGuard(req, res, next) {
 const lastSearchSweep = setInterval(sweepLastSearch, 60_000);
 lastSearchSweep.unref();   // 不阻塞进程退出
 
-// 定期清理过期未验证的 pending 用户（验证链接 15 分钟有效，过期即视为放弃）
-// 释放被占用的 username / email，避免「未收到验证邮件 → 账号被锁定无法重新注册」
-const PENDING_SWEEP_INTERVAL_MS = 60_000;
+// 定期清理过期未验证的 pending 用户(验证链接 15 分钟有效,过期即视为放弃)。
+// 释放被占用的 username / email,避免「未收到验证邮件 → 账号被锁定无法重新注册」。
+// 与 src/db-sweep.js:sweepPendingUsers 各跑各的(本文件 60s,db-sweep 6h):
+//   本文件负责秒级响应 + 写审计日志(详情见下)
+//   db-sweep 兜底防 server.js 调度被事件循环卡住时漏处理
 function sweepExpiredPending() {
   try {
     const deleted = db.sweepExpiredPendingUsers();

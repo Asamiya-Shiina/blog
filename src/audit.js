@@ -38,6 +38,11 @@ const deleteByAgeStmt = db.prepare(
 const countStmt = db.prepare('SELECT COUNT(*) AS n FROM audit_log');
 const deleteOldestStmt = db.prepare('DELETE FROM audit_log WHERE id IN (SELECT id FROM audit_log ORDER BY at ASC LIMIT ?)');
 
+// 审计日志 sweep:双重保留策略。
+//   1) 按年龄:删 90 天前的(主需求,大多数审计追溯不会看更早)
+//   2) 按行数:超过 10 万行硬上限时再砍到 8 万(软上限,留 20% 缓冲)
+// 软上限的存在:避免刚 sweep 完立即又触顶 — 假设 6h 后 sweep 再跑,
+// 这段时间足够容纳一波峰值,不需要频繁触发删行。
 function sweep() {
   try {
     deleteByAgeStmt.run(`-${RETAIN_DAYS} days`);

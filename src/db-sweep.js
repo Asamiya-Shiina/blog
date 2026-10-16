@@ -28,6 +28,13 @@ const deleteOldestPageViewsStmt = db.prepare(
 // HTTP / SSE 推送可以插入，避免 sweep 期间整站停顿。
 const DELETE_BATCH_SIZE = 5000;
 
+// page_views 双重保留策略(同 audit.sweep 的设计):
+//   1) 按年龄:删 30 天前的(主需求,统计只查「今日」)
+//   2) 按行数:超 5 万行硬上限再砍到 4 万(软上限,留 20% 缓冲)
+//
+// 分批 DELETE(单批 5000 行)的理由:单条 DELETE 多万行会在 WAL 持有写锁期间
+// 阻塞所有其它写入,影响 /api/stats/view 与查询。每批 5-15ms,期间通过
+// setImmediate 让出事件循环,HTTP / SSE 推送可以插入。
 async function sweepPageViews() {
   try {
     deleteByAgeStmt.run(`-${RETAIN_DAYS} days`);
@@ -40,7 +47,7 @@ async function sweepPageViews() {
       const info = deleteOldestPageViewsStmt.run(batch);
       deleted += info.changes;
       remaining -= batch;
-      // 让出事件循环：单批 5-15ms 后插入一次 microtask，让其它 HTTP/SSE 处理
+      // 让出事件循环：单批 5-15ms 后插入一次 microtask,让其它 HTTP/SSE 处理
       await new Promise(resolve => setImmediate(resolve));
     }
     if (deleted > 0) {
@@ -51,6 +58,10 @@ async function sweepPageViews() {
   }
 }
 
+// 委托 db.sweepExpiredPendingUsers():清理 verify_expires 已过期的 pending 用户,
+// 释放被占用的 username / email,允许用户立即重新注册。
+// 返回删除列表[{id, username, email}],写入审计日志由调用方负责
+// (此处 db-sweep 不依赖 audit.js,避免循环依赖)。
 async function sweepPendingUsers() {
   try {
     const removed = db.sweepExpiredPendingUsers();

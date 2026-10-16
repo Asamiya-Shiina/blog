@@ -5,6 +5,10 @@
 
 const { SHARED_HEAD, renderFloatingUI } = require('./posts');
 
+// 状态页 HTML 骨架。
+// - #status-dot / #status-label 由 status-client.js 在 SSE 连上/断开时切换样式与文案
+// - #status-content 是设备列表容器,首次连接时由客户端渲染,后续 SSE 推送做增量更新
+// - noindex:该页无 SEO 价值(每几秒就变),避免被搜索引擎抓到旧快照
 function renderStatusPage() {
   return `<!DOCTYPE html>
 <html lang="zh-CN">

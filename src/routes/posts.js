@@ -19,7 +19,14 @@ function renderHtml(md) {
   return sanitizeMarkdown(md);
 }
 
-// 生成 URL 友好的 slug：小写、连字符分隔、过滤特殊字符
+// 生成 URL 友好的 slug。
+// 规则链:
+//   1) 全小写(URL 不区分大小写,但保留原始大小写会让搜索引擎抓两遍)
+//   2) 空白 / 下划线 → 连字符(允许中文标题直接转拼音或保留为单字)
+//   3) 仅保留 Unicode 字母数字 + 连字符(\p{Letter} 含中文,保证中文标题可工作)
+//   4) 合并连续连字符、去首尾连字符
+//   5) 截断到 80 字符(slug 长度合理上限,URL 美观)
+// 空结果(纯符号标题)回落 'post-' + 时间戳,保证唯一性同时给个能点击的 URL。
 function slugify(input) {
   const base = String(input || '')
     .toLowerCase()
@@ -31,7 +38,10 @@ function slugify(input) {
   return base || 'post-' + Date.now();
 }
 
-// 确保 slug 唯一：若已存在则追加数字后缀（例如 my-post-2）
+// 确保 slug 唯一:若已存在则追加数字后缀(my-post → my-post-2 → my-post-3)。
+// excludeId 用于排除当前正在编辑的文章自身(避免与「自己」的 slug 撞)。
+// 循环而非一次性取 max:并发场景下其它请求可能在你 SELECT 与 INSERT 之间
+// 抢先一步占号,while + 重新检查是天然的乐观锁。
 function uniqueSlug(base, excludeId) {
   let slug = base;
   let n = 1;
@@ -46,16 +56,21 @@ function uniqueSlug(base, excludeId) {
   }
 }
 
-// 整体替换某文章的分类关联（传入空数组可清空分类）
-// 去重：post_categories 是 (post_id, category_id) 复合主键，重复 ID 直接插入会撞主键报错
+// 整体替换某文章的分类关联(传入空数组可清空分类)。
+// 用 DELETE + INSERT 而非「diff 更新」:文章分类数量通常 < 10,
+// 全删全插的固定成本与 diff 相当,逻辑简单不易出 bug。
+// 去重(传入重复 ID 会撞 post_categories 复合主键):前端表单可能因用户多次点选
+// 提交重复,这里用 Set 在入库前去重一次。
 function setPostCategories(postId, categoryIds) {
   db.prepare('DELETE FROM post_categories WHERE post_id = ?').run(postId);
   const ins = db.prepare('INSERT INTO post_categories (post_id, category_id) VALUES (?, ?)');
   for (const id of [...new Set(categoryIds || [])]) ins.run(postId, id);
 }
 
-// 返回请求中不存在的分类 ID
-// 预校验：把可预见的外键错误挡在事务外，返回精确 400 而不是让 SQLite 抛错变 500
+// 返回请求中不存在的分类 ID。
+// 预校验原因:把可预见的外键错误挡在事务外,返回精确 400 而不是让 SQLite
+// 抛错变 500。注意这只是乐观检查 —— 分类在校验与写入之间被并发删除的情况
+// 仍可能命中,事务层有 isFkError 兜底返回 400(见下方 POST/PUT 路由)。
 function missingCategoryIds(categoryIds) {
   const ids = [...new Set(categoryIds || [])];
   if (ids.length === 0) return [];
@@ -82,8 +97,10 @@ function checkCategoryIds(res, categoryIds) {
   return true;
 }
 
-// 一次性查询多篇文章的分类映射：{ postId: [{id,name}, ...] }
-// 通过 LEFT JOIN 一次完成，避免列表接口的 N+1 查询
+// 一次性查询多篇文章的分类映射:{ postId: [{id,name}, ...] }
+// 通过单次 IN 查询拉回所有 post 的分类,避免列表接口的 N+1 查询。
+// 排序在 SQL 层做 c.name,前端无需再排序。
+// 返回 Map 而非数组:调用方按 postId 取值,O(1) 复杂度。
 function categoriesForPosts(postIds) {
   const ids = [...new Set(postIds.filter(Number.isInteger))];
   if (ids.length === 0) return new Map();
@@ -102,8 +119,11 @@ function categoriesForPosts(postIds) {
   return map;
 }
 
-// 将数据库行映射为文章对象
-// withHtml=true 时额外渲染 content_html（供编辑器预览使用）
+// 将数据库行映射为对外暴露的文章对象。
+// withHtml=true 时额外渲染 content_html(供编辑器预览使用);
+// 列表接口默认不渲染,避免 marked + DOMPurify 在列表中跑一遍产生无用开销。
+// categories 走 getPostCategories(单文章)而非 categoriesForPosts(批量):
+// 单文章详情接口的访问频率远低于列表,N+1 成本可接受。
 function rowToPost(row, { withHtml = false } = {}) {
   if (!row) return null;
   const post = {

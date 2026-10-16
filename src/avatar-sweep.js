@@ -19,6 +19,8 @@ const AVATAR_DIR = path.join(__dirname, '..', 'data', 'uploads', 'avatars');
 const MUSIC_DIR  = path.join(__dirname, '..', 'data', 'uploads', 'music');
 const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 小时
 
+// readdir 容错版:目录不存在时建一个再返回空,避免首次启动或重建容器时整次 sweep 抛错。
+// ENOENT 之外的错误向上抛 — 那是真的文件系统问题,应该告警而不是吞掉。
 async function readdirSafe(dir) {
   try {
     return await fsp.readdir(dir);
@@ -31,8 +33,12 @@ async function readdirSafe(dir) {
   }
 }
 
-// 从 dir 中找出未被 referenced 集合引用的文件；跳过 .tmp 与隐藏文件
-// 注意：.tmp 不在这里处理（见 sweepStaleTmp），避免误删正在写入的半成品
+// 从 dir 中找出未被 referenced 集合引用的文件;跳过 .tmp 与隐藏文件。
+// 注意:.tmp 不在这里处理(见 sweepStaleTmp),避免误删正在写入的半成品。
+// 过滤条件三层:
+//   . 开头 → 隐藏文件(macOS .DS_Store、Linux .nfs* 等)
+//   .tmp 结尾 → 上传中或上传失败的中间产物
+//   在 referenced 中 → 还在被某个用户/歌曲引用
 async function diffOrphans(dir, referenced) {
   const names = await readdirSafe(dir);
   return names.filter(
@@ -47,6 +53,10 @@ async function diffOrphans(dir, referenced) {
 // 这里按修改时间清理超过 1 小时的 .tmp：正在上传的文件绝不会这么旧。
 const TMP_MAX_AGE_MS = 60 * 60 * 1000;
 
+// 清陈旧 .tmp。
+// 上传流程是「写 .tmp → rename → 提交 DB」,若进程在写完之后、rename 之前被杀,
+// 就会留下一个永远不会被引用的 .tmp。这里按 mtime 阈值清理超过 1 小时的文件:
+// 正在上传的文件绝不会这么旧(头像 ≤200KB、音乐 ≤15MB,在 SSD 上秒级完成)。
 async function sweepStaleTmp(dir) {
   let removed = 0;
   const now = Date.now();
@@ -60,11 +70,13 @@ async function sweepStaleTmp(dir) {
         await fsp.unlink(full);
         removed += 1;
       }
-    } catch { /* 文件已消失或不可读，跳过 */ }
+    } catch { /* 文件已消失或不可读,跳过 */ }
   }
   return removed;
 }
 
+// 逐个 unlink 孤儿,记录成功/失败数。
+// 单文件删除失败不中断整体 sweep:挂载卷只读、权限异常等单点问题应被记日志,
 async function unlinkOrphans(dir, orphans) {
   let removed = 0, failed = 0;
   for (const name of orphans) {
@@ -128,8 +140,11 @@ function walCheckpoint() {
   }
 }
 
+// 串起三类清理任务。
+// 头像与音乐清理互不依赖,Promise.all 并行触发,IO 异步时不阻塞对方。
+// walCheckpoint 串在最后:即便本次 sweep 中途崩溃,下次 24h 周期仍会 checkpoint,
+// 而头像/音乐的孤儿累计一天清理一次也无大碍。
 async function runAll() {
-  // 头像与音乐清理互不依赖，并行触发（IO 异步时不阻塞对方）
   await Promise.all([sweepOrphanAvatars(), sweepOrphanMusic()]);
   walCheckpoint();
 }

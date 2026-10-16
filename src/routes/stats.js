@@ -32,13 +32,19 @@ function normalizeIp(raw) {
   return 'unknown';
 }
 
-// 同一 IP 在 5 分钟内只记录一次（防刷）
+// 同一 IP 在 5 分钟内只记录一次(防刷)。
+// 该窗口已覆盖正常用户的多次刷新;再短会被误杀,再长挡不住攻击。
 const VIEW_DEBOUNCE_MS = 5 * 60 * 1000;
-// 内存缓存：{ "ip::path": timestamp }
-// 硬上限：超过后强制驱逐最旧的 25%，防止攻击者使用大量不同 path 将内存撑爆
+
+// 内存缓存:{ "ip::path": timestamp }
+// 硬上限:超过后强制驱逐最旧的 25%,防止攻击者使用大量不同 path 将内存撑爆。
+// key 用 :: 而非 : 分隔:IPv6 地址本身带 :,用 :: 双冒号作为分隔更不易撞。
 const VIEW_CACHE_MAX = 10000;
 const recentViews = new Map();
 
+// 按插入顺序驱逐最旧的 ratio 比例条目。
+// 与 status-store 的 evictUserDevices/enforceGlobalCap 同模式,理由一致:
+// 留 25% 缓冲避免每次 set 都触发驱逐。
 function evictOldest(map, ratio) {
   const drop = Math.max(1, Math.floor(map.size * ratio));
   let i = 0;
@@ -49,13 +55,16 @@ function evictOldest(map, ratio) {
   }
 }
 
+// 判断一条访问记录是否应该入 page_views 表。
+// 返回 true 表示「该写入」、false 表示「窗口内已记过,跳过」。
+// 触发时机:每次 POST /api/stats/view 调用。
 function shouldRecord(ip, path) {
   const now = Date.now();
   const key = `${ip}::${path}`;
   const last = recentViews.get(key);
   if (last && now - last < VIEW_DEBOUNCE_MS) return false;
   recentViews.set(key, now);
-  // 超过硬上限：先清理过期项，仍超限则按插入顺序驱逐最旧的 25%
+  // 超过硬上限:先清理过期项,仍超限则按插入顺序驱逐最旧的 25%
   if (recentViews.size > VIEW_CACHE_MAX) {
     for (const [k, t] of recentViews) {
       if (now - t > VIEW_DEBOUNCE_MS) recentViews.delete(k);
