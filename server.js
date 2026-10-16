@@ -414,6 +414,7 @@ lastSearchSweep.unref();   // 不阻塞进程退出
 // 与 src/db-sweep.js:sweepPendingUsers 各跑各的(本文件 60s,db-sweep 6h):
 //   本文件负责秒级响应 + 写审计日志(详情见下)
 //   db-sweep 兜底防 server.js 调度被事件循环卡住时漏处理
+const PENDING_SWEEP_INTERVAL_MS = 60_000;
 function sweepExpiredPending() {
   try {
     const deleted = db.sweepExpiredPendingUsers();
