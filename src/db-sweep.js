@@ -88,5 +88,5 @@ function schedule() {
       t.unref();
     });
 }
-
+//立即执行一次
 schedule();
