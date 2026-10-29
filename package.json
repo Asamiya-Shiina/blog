@@ -8,7 +8,7 @@
     "dev": "node --watch-path=./src --watch-path=server.js server.js"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.0.0"
   },
   "keywords": [],
   "author": "",

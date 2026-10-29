@@ -1,16 +1,18 @@
 # syntax=docker/dockerfile:1
+# 默认拉取 Node.js 24 的最新补丁版本（node:24-slim 浮动标签）
+ARG NODE_VERSION=24
 # 多阶段构建：编译工具只留在 build 阶段，runtime 精简到最小。
 # 体积从 ~1GB 降到约 200MB 量级。
 
 # —— build：装编译工具，编译 better-sqlite3 / bcrypt 等原生模块 ——
-FROM node:24-slim AS build
+FROM node:${NODE_VERSION}-slim AS build
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 # —— runtime：不带编译器，只保留运行依赖 ——
-FROM node:24-slim AS runtime
+FROM node:${NODE_VERSION}-slim AS runtime
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # gosu 降权；libstdc++6 供原生 .node 模块（better-sqlite3/bcrypt）加载
